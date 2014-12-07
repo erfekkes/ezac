@@ -1,0 +1,6 @@
+name = EZAC reservering
+    description = Functies voor EZAC leerling reservering
+    ;package = Notes example
+    ;dependencies[] = services
+    core = 7.x
+    php = 5.2

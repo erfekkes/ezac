@@ -1,0 +1,6 @@
+name = EZAC passagiers
+    description = Functies voor EZAC passagier reservering
+    ;package = Notes example
+    dependencies[] = services
+    core = 7.x
+    php = 5.2

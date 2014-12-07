@@ -1,0 +1,6 @@
+; $Id$
+name = EZAC ledenlijst
+description = Ledenlijst met zoekfunctie
+version = "7.x-0.1"
+core = 7.x
+core = 7.x

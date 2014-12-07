@@ -1,0 +1,1824 @@
+<?php
+// $Id$
+
+/***
+* EZAC passagiers v7.x-1.0
+* 
+* Functie: vastlegging reserveringen passagiers
+* 
+* Aanmaken slot tijden in ezac_Passagiers_Slots
+* Aanmaken beschikbare dagen in ezac_Passagiers_Dagen
+* Vastleggen reservering in ezac_Passagiers
+* Wijzigen en annuleren reserveringen
+* Overzicht reserveringen en beschikbare slots
+* 
+*/
+
+/**
+ * Constants and globals
+ */
+define ('VERWIJDER_ITEM', 'Verwijder gemarkeerde item(s)');
+define ('VOEG_TOE', 'Voeg toe');
+define ('DATUM_REEKS', 'Maak datum reeks aan');
+define ('RESERVERING_OPTIE', 'optie');
+define ('RESERVERING_BEVESTIGD', 'bevestigd');
+define ('OPTIE_TIJD', 3600); //een uur
+
+/**
+* Implementation of hook_permission().
+*/
+function ezacpass_permission() {
+  return array(
+    'ezac_pass_view' => array(
+      'title' => t('EZAC passagiers inzage'),
+      'description' => t('Bekijken EZAC passagier reserveringen'),
+    ),
+    'ezac_pass_edit' => array(
+      'title' => t('EZAC passagiers reserveren'),
+      'description' => t('Maken EZAC passagier reserveringen'),
+    ),
+    'ezac_pass_manage' => array(
+      'title' => t('EZAC passagiers capaciteit instellen'),
+      'description' => t('Instellen EZAC passagier slots en dagen'),
+    ),
+  );
+}
+
+/**
+* Implements hook_services_resources().
+*/
+function ezacpass_services_resources() {
+  $api = array(
+   'passagiers' => array(
+      'operations' => array(
+        'retrieve' => array( // GET
+          'help' => 'Retrieves passagiers reserveringen',
+          'callback' => '_ezacpass_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), 
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'resource_id',
+              'type' => 'string',
+              'description' => 'resource id',
+              'source' => array('path' => '0'), //<id>|<afkorting> of record requested or <*>
+              'optional' => FALSE,
+              'default value' => '0',
+            ),
+            array(
+              'name' => 'datum', //optional parameter <code>
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => TRUE,
+              'default value' => 'VL',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return $api;
+}
+
+/**
+* Implementation of hook_menu().
+*/
+function ezacpass_menu() {
+  $items['passagiers'] = array(
+      'title' => 'EZAC passagiers',
+      'description'=> 'Inzage EZAC passagiers',
+      'page callback' => '_ezacpass_reserveer',
+      'page arguments' => '', 
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_edit'),
+      'type' => MENU_NORMAL_ITEM
+    ); 
+  $items['passagiers/reservering'] = array(
+      'title' => 'Invoeren reservering',
+      'description'=> 'Opgeven meevliegen',
+      'page callback' => '_ezacpass_reserveer',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_edit'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => 0,
+    );
+  $items['passagiers/vandaag'] = array(
+      'title' => 'Dag',
+      'description'=> 'Passagierslijst van vandaag',
+      'page callback' => '_ezacpass_dag',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 1, 
+    );
+  $items['passagiers/maand'] = array(
+      'title' => 'Maand',
+      'description'=> 'Passagiers per maand',
+      'page callback' => '_ezacpass_maand',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 2,
+    );
+  $items['passagiers/jaar'] = array(
+      'title' => 'Jaar',
+      'description'=> 'Passagiers per jaar',
+      'page callback' => '_ezacpass_jaar',
+      'page arguments' => array(2), //jaar of starts record
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 3,
+    );
+  $items['passagiers/reserveer'] = array(
+      'title' => 'Invoeren reservering',
+      'description'=> 'Invoeren reservering',
+      'page callback' => '_ezacpass_reserveer_input',
+      'page arguments' => array(2,3), //datum en tijd
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_edit'),
+      'type' => MENU_CALLBACK,
+      'weight' => 4,
+  );
+  $items['passagiers/bevestigen'] = array(
+      'title' => 'Bevestiging van reservering',
+      'description'=> 'Bevestigen reservering',
+      'page callback' => '_ezacpass_bevestig',
+      'page arguments' => array(2), //id
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_edit'),
+      'type' => MENU_CALLBACK,
+      'weight' => 5,
+  );
+  $items['passagiers/slots'] = array(
+      'title' => 'Instellen slot tijden',
+      'description'=> 'Instellen slot tijden voor begin seizoen',
+      'page callback' => '_ezacpass_slots',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_manage'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 6,
+    );
+  $items['passagiers/dagen'] = array(
+      'title' => 'Instellen beschikbare dagen',
+      'description'=> 'Instellen beschikbare dagen voor begin seizoen',
+      'page callback' => '_ezacpass_dagen',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_manage'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 7,
+    );
+  $items['passagiers/confirm'] = array(
+      'title' => 'Bevestigen',
+      'description'=> 'Bevestigen van reservering',
+      'page callback' => '_ezacpass_confirm',
+      'page arguments' => array(2, 3), //id en hash
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_edit'), // not logged-in
+      'type' => MENU_CALLBACK,
+    );
+  $items['passagiers/delete'] = array(
+      'title' => 'Verwijderen',
+      'description'=> 'Verwijderen eigen reservering',
+      'page callback' => '_ezacpass_delete',
+      'page arguments' => array(2, 3), //id en hash
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_edit'), // not logged-in
+      'type' => MENU_CALLBACK,
+    );
+  $items['passagiers/verwijder'] = array(
+      'title' => 'Verwijderen',
+      'description'=> 'Verwijderen reservering',
+      'page callback' => '_ezacpass_verwijder',
+      'page arguments' => array(2), //id 
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_pass_view'), // logged-in
+      'type' => MENU_CALLBACK,
+    );
+  return $items;
+}
+
+
+/**
+ * web services routines
+ */
+
+/**
+ * Helper function to verify dates
+ * @param string $datum
+ * datum to be verified
+ * @param string &$datumStart
+ * @param string &$datumEnd
+ **/
+function ezacpass_check_datum($datum, &$datumStart, &$datumEnd) {
+  //Verify $datum as YYYY-MM-DD, YYYY-MM or YYYY
+  $datum_delen = explode('-', $datum);
+  switch (strlen($datum)) {
+    case 4: //YYYY
+        if (!checkdate(01, 01, $datum_delen[0])) {
+            $errmsg = 'Invalid value parameter datum YYYY [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum .'-01-01';
+        $datumEnd   = $datum .'-12-31';
+        break;
+    case 7: //YYYY-MM
+        if (!checkdate($datum_delen[1], 01, $datum_delen[0])) {
+            $errmsg = 'Invalid value parameter datum YYYY-MM [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum .'-01';
+        if     (checkdate($datum_delen[1], 31, $datum_delen[0])) $datumEnd = $datum .'-31';
+        elseif (checkdate($datum_delen[1], 30, $datum_delen[0])) $datumEnd = $datum .'-30';
+        elseif (checkdate($datum_delen[1], 29, $datum_delen[0])) $datumEnd = $datum .'-29';
+        elseif (checkdate($datum_delen[1], 28, $datum_delen[0])) $datumEnd = $datum .'-28';
+        break;
+    case 10: //YYYY-MM-DD
+        if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) { //mm dd yyyy
+            $errmsg = 'Invalid value parameter datum YYYY-MM-DD [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum; // .' 00:00:00');
+        $datumEnd   = $datum; // .' 23:59:59');
+        break;
+    default: //invalid
+        $errmsg = 'Invalid length parameter datum [' .$datum .']';
+        return services_error($errmsg, 406);
+  }
+}
+
+
+/**
+* Callback function for passagiers retrieve
+* @param string $resource_id value for start record OR datum value in YYYY[-mm[-dd]] format (van:tot)
+* $param string $naam value for Gezagvoerer or Tweede (optional)
+* @return array xml or json formatted list of ezac_Starts records
+*/
+function _ezacpass_retrieve($resource_id, $datum) { 
+  // Check permission
+  // TODO this may not be required
+  /*
+  if (!user_access('EZACservices starts retrieve')) {
+    return services_error('Unauthorized', 401);
+  } */
+  // Check for mad values
+
+    if ($resource_id <> '*') { // select specific record
+      if (!is_numeric($resource_id)) {
+        $errmsg = 'Id value not allowed [' .$resource_id .']';
+        return services_error($errmsg, 406);
+      }
+      $id = intval($resource_id);
+      //return 'zoek op id ' .$id;
+      return ezacpass_find_items_by_id($id); // select one start record by id
+    }
+  //$resource_id = *
+  
+  // required parameters available or default values generated?
+  if (!isset($datum) or $datum == NULL) {
+        $datum = date('Y-m-d'); //defaults to today as YYYY-MM-DD
+        //return services_error('Missing parameter datum', 406);
+      }
+  
+  //if $datum is a range, split and process
+  // range is indicated by date:date format
+  if (strpos($datum, ':')) {
+    $datum_range = explode(':',$datum);
+    ezacpass_check_datum($datum_range[0], $datumStart, $datumEnd);
+    $ds = $datumStart;
+    ezacpass_check_datum($datum_range[1], $datumStart, $datumEnd);
+    $de = $datumEnd;
+    return ezacpass_find_items_by_date($ds, $de);
+  }
+  else { //single date
+    ezacpass_check_datum($datum, $datumStart, $datumEnd);
+    return ezacpass_find_items_by_date($datumStart, $datumEnd);
+  }
+}
+
+/**
+* Gets passagiers records
+* @param string $datumStart timestamp
+*       lower boundary
+* @param string $datumEnd timestamp
+*       higher boundary
+* @return array
+*       list of ezac_Starts records within Datum boundaries
+*/
+function ezacpass_find_items_by_date($datumStart, $datumEnd) {
+  // Compose query
+  $query = db_select('ezac_Passagiers', 'p');
+  //$query->fields('p'); //SELECT * from ezac_Passagiers
+  $query->fields('p', array('id', 'datum', 'tijd', 'naam', 'telefoon', 'mail', 'soort', 'status', 'gevonden', 'mail_list'));
+  $query->condition('p.datum', array($datumStart, $datumEnd), 'BETWEEN');
+
+  $query->orderBy('p.datum', 'ASC');
+  $query->orderBy('p.tijd', 'ASC');
+
+  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  return $items;
+} 
+
+/**
+* Gets one passagiers record
+* @param int $id
+*       Id of record selected
+* @return array
+*       ezac_Passagiers record with Id = $id
+*/
+function ezacpass_find_items_by_id($id) {
+  // Compose query
+  $query = db_select('ezac_Passagiers', 'p');
+  $query->fields('p', array('id', 'datum', 'tijd', 'naam', 'telefoon', 'mail', 'soort', 'status', 'gevonden', 'mail_list'));
+  $query->condition('p.id', $id, '=');
+  $items = $query->execute()->fetchAll(); 
+  return $items;
+}
+ 
+ 
+/**
+ * Define slot times
+ */
+function _ezacpass_slots() {
+  return drupal_get_form('ezacpass_slot_form');
+}
+
+/**
+ * form for editing of slot list
+ */
+function ezacpass_slot_form($form, &$form_state) {
+  // form elements: radio button existing slots, new slot textfield, update/delete action dropdown, submit button
+  // create new slot via submit button
+   
+  // read existing slots
+  $query = db_select('ezac_Passagiers_Slots', 'l');
+  $query->fields('l',array('slot_tijd'));
+  $slots = $query->execute()->fetchCol();
+
+  // create intro
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = '<p><h1>Instellen slot tijden voor reserveringen</h1></p>';
+  $form[0]['#markup'] .= '<p>Elk slot is drie kwartier vanaf de aangegeven starttijd';
+  $form[0]['#markup'] .= '<br>Bijvoorbeeld 13:30, 14:15, 15:00, 15:45, 16:30, 17:15';
+  $form[0]['#markup'] .= '<br>De slots gelden het gehele vliegseizoen</p>';
+  $form[0]['#weight'] = 0;
+  
+  $form['slotlist'] = array(
+    '#type'  => 'fieldlist',
+    '#title' => t('Slot tijden'),
+    '#prefix' => '<div id="slotlist-div">',
+    '#suffix' => '</div>',
+    '#weight' => 1,
+    '#tree' => true,
+  );
+
+  //build initial checkbox list
+  $i = 0;
+  foreach ($slots as $slot) {
+    $form['slotlist'][$i] = array(
+      '#type'  => 'checkbox',
+      '#title' => $slot,
+      '#value' => 0,
+      '#tree' => true,
+    );
+    $form['slotlist']['slots'][$i] = array(
+      '#type'  => 'hidden',
+      '#value' => $slot,
+      '#tree' => true,
+    );
+    $i++;
+  }
+
+  $form['nr_slots'] = array(
+    '#type'  => 'hidden',
+    '#title' => t('aantal slots'),
+    '#value' => $i,
+  );
+  
+  $form['remove'] = array(
+    '#type'  => 'submit',
+    '#value' => t(VERWIJDER_ITEM),
+    //'#submit' => array('ezacpass_slot_remove'),
+    //'#limit_validation_errors' => $form_state['values']['slots'], // werkt zo niet
+    '#prefix' => '<div id="verwijder-div">',
+    '#suffix' => '</div>',
+
+    '#weight' => 2,
+  );
+  
+  /*  
+  $form['action'] = array(
+    '#title' => t('Actie voor geselecteerd'),
+    '#type' => 'select',
+    '#options' => array('', t('verwijder')),
+    '#ajax' => array(
+      'callback' => 'ezacpass_slots_callback',
+      'wrapper' => 'slotlist-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+    '#weight' => 2,
+  );
+  */
+  
+  $form['slot'] = array(
+    '#title' => t('Nieuwe slot tijd'),
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#default_value' => '', //last time plus 45 minutes
+    '#description' => t('Tijd in UU:MM formaat'),
+    '#weight' => 3,
+  );
+ 
+  $form['submit'] = array(
+     '#type' => 'submit',
+     '#value' => t(VOEG_TOE),
+     '#weight' => 4,
+  );
+  return $form;
+}
+
+/**
+ * Validate slot
+ * op defines button pressed: "verwijder" or "voeg toe"
+ */
+function ezacpass_slot_form_validate($form, &$form_state) {
+  //drupal_set_message('Validate'); //debug
+  $op = $form_state['values']['op'];
+  
+  if ($op == t(VERWIJDER_ITEM)) {
+    // geen database actie?
+    //drupal_set_message('Verwijderen'); //debug
+    $nr_slots = $form_state['input']['nr_slots'];
+    //drupal_set_message("nr_slots: $nr_slots");
+    for ($i=0; $i < $nr_slots; $i++) {
+      if ($i > 20) return; //debug
+      $slot = $form_state['input']['slotlist']['slots'][$i];
+      if (!empty($form_state['input']['slotlist'][$i])) {
+        $checked = $form_state['input']['slotlist'][$i];
+      }
+      else $checked = false;
+      // drupal_set_message("slot $i - tijd:$slot - checked:$checked"); //debug
+      //if (form_type_checkbox_value($slot_list)
+      if (!empty($form_state['input']['slotlist']) && $checked) {
+        //remove slot and update $slots
+        //drupal_set_message('delete slot ' .$form_state['input']['slotlist']['slots'][$i]); //debug
+        
+        $num_deleted = db_delete('ezac_Passagiers_Slots')
+        ->condition('slot_tijd', $slot)
+        ->execute();
+        
+        if ($num_deleted) {
+          drupal_set_message('Slot tijd ' .$form_state['input']['slotlist']['slots'][$i] .' is verwijderd');
+        }
+      }
+    }
+    $form_state['rebuild'] = TRUE;
+  }
+  else { //opvoeren slot
+    //drupal_set_message('Validate opvoeren - ' .$op);
+    $slot = $form_state['values']['slot'];
+        if (empty($slot)) {
+      form_set_error('slot', 'Geen tijd ingevuld');
+      return;
+    }
+    // validate $slot field for UU:MM format and valid time range
+    $tijd = explode(':', $slot);
+    if (!isset($tijd[0])) {
+      form_set_error('slot', 'tijd onjuist');
+      return;
+    }
+    if (intval($tijd[0]) < 9) {
+      form_set_error('slot', 'tijd moet tussen 09 en 21 uur liggen');
+      return;
+    } 
+    if (intval($tijd[0]) > 21) {
+      form_set_error('slot', 'tijd moet tussen 09 en 21 uur liggen');
+      return;
+    } 
+    if (!isset($tijd[1])) {
+      form_set_error('slot', 'tijd onjuist');
+      return;
+    }
+    if (intval($tijd[1]) < 0) {
+      form_set_error('slot', 'tijd ongeldig');
+      return;
+    }
+    if (intval($tijd[1]) > 59) {
+      form_set_error('slot', 'tijd ongeldig');
+      return;
+    }
+    $slottijd = sprintf('%02u:%02u', $tijd[0], $tijd[1]);
+    // check whether slot already exists or overlaps
+    $exists = db_select('ezac_Passagiers_Slots', 'l')
+      ->fields('l', array('slot_tijd'))
+      ->condition('l.slot_tijd', $slottijd, '=')
+      ->execute()->rowCount();
+    if ($exists > 0) {
+      form_set_error('slot', "slot $slottijd bestaat al");
+      return;
+    }
+  }
+  return;
+}
+
+function ezacpass_slot_form_submit($form, &$form_state) {
+  // create slot in database
+  $op = $form_state['values']['op'];
+  if ($op == t(VERWIJDER_ITEM)) {
+    // geen database actie?
+  }
+  else { //opvoeren slot
+    $slot = $form_state['values']['slot'];
+    $tijd = explode(':', $slot);
+    $slottijd = sprintf('%02u:%02u', $tijd[0], $tijd[1]);
+  
+    $invoegen = db_insert('ezac_Passagiers_Slots')
+    ->fields(array('slot_tijd' => $slottijd))
+    ->execute();
+    drupal_set_message("Tijd $slottijd toegevoegd");
+  }
+  return;
+}
+
+/**
+ * Create dagen table for available reservation slots
+ */
+function _ezacpass_dagen() {
+  return drupal_get_form('ezacpass_dagen_form');
+}
+
+function ezacpass_dagen_form($form, &$form_state) {
+  //lees beschikbare dagen uit ezac_Passagiers_Dagen
+  $query = db_select('ezac_Passagiers_Dagen', 'd');
+  $query->fields('d',array('datum'));
+  $dagen = $query->execute()->fetchCol();
+
+  // present in list
+  // create intro
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = '<p><h2>Instellen dagen voor reserveringen</h2></p>';
+  $form[0]['#markup'] .= '<p>Voor elke opgegeven dag zijn de opgegeven slots beschikbaar</p>';
+  $form[0]['#weight'] = 0;
+  
+  $form['dagenlist'] = array(
+    '#type'  => 'fieldlist',
+    '#title' => t('Dagen voor meevliegen'),
+    '#prefix' => '<div id="dagenlist-div">',
+    '#suffix' => '</div>',
+    '#weight' => 1,
+    '#tree' => true,
+  );
+
+  //build initial checkbox list
+  $i = 0;
+  foreach ($dagen as $dag) {
+    $form['dagenlist'][$i] = array(
+      '#type'  => 'checkbox',
+      '#title' => $dag .' ' .t(date('l', strtotime($dag))),
+      '#value' => 0,
+      '#tree' => true,
+      '#weight' => 1 + ($i/100),
+    );
+    $form['dagenlist']['dagen'][$i] = array(
+      '#type'  => 'hidden',
+      '#value' => $dag,
+      '#tree' => true,
+    );
+    $i++;
+  }
+
+  $form['nr_dagen'] = array(
+    '#type'  => 'hidden',
+    '#title' => t('aantal dagen'),
+    '#value' => $i,
+  );
+  
+  $form['remove'] = array(
+    '#type'  => 'submit',
+    '#value' => t(VERWIJDER_ITEM),
+    '#prefix' => '<div id="verwijder-div">',
+    '#suffix' => '</div>',
+    '#weight' => 2,
+  );
+  
+  // create new series from weekend date for x weeks DATUM_REEKS
+  $form[1]['#type'] = 'markup';
+  $form[1]['#markup'] = '<p><h2>Instellen reeks weekends voor reserveringen</h2></p>';
+  $form[1]['#markup'] .= '<p>Geef de eerste zaterdag van de reeks op en het aantal weekends</p>';
+  $form[1]['#weight'] = 3;
+  
+  // find first weekend after date:
+  $first_date = date('Y-m-d',strtotime('saturday',strtotime('2014-04-13')));
+  $form['serie_start'] = array(
+    '#title' => t('Nieuwe datum serie vanaf zaterdag'),
+    '#type' => 'textfield',
+    '#size' => 10,
+    '#default_value' => $first_date, 
+    '#description' => t('Datum in JJJJ-MM-DD formaat, zaterdag'),
+    '#weight' => 4,
+  );
+  $form['serie_aantal'] = array(
+    '#title' => t('Aantal weekends'),
+    '#type' => 'textfield',
+    '#size' => 2,
+    '#default_value' => 26, 
+    '#description' => t('aantal weekends voor reguliere passagiers'),
+    '#weight' => 5,
+  );
+  $form['reeks'] = array(
+    '#type' => 'submit',
+    '#value' => t(DATUM_REEKS),
+    '#prefix' => '<div id="reeks-div">',
+    '#suffix' => '</div>',
+    '#weight' => 6,
+  );
+  
+  // Toevoegen van een enkele dag
+  $form[2]['#type'] = 'markup';
+  $form[2]['#markup'] = '<p><h2>Toevoegen van een dag voor reserveringen</h2></p>';
+  $form[2]['#markup'] .= '<p>Geef de gewenste datum</p>';
+  $form[2]['#weight'] = 7;
+
+  $form['dag'] = array(
+    '#title' => t('Nieuwe beschikbare datum'),
+    '#type' => 'textfield',
+    '#size' => 10,
+    '#default_value' => '', 
+    '#description' => t('Datum in JJJJ-MM-DD formaat'),
+    '#weight' => 8,
+  );
+ 
+  $form['submit'] = array(
+     '#type' => 'submit',
+     '#value' => t(VOEG_TOE),
+     '#weight' => 9,
+  );
+  return $form;
+}
+
+
+function ezacpass_dagen_form_validate($form, &$form_state) {
+  //drupal_set_message('Validate'); //debug
+  $op = $form_state['values']['op'];
+  
+  if ($op == t(VERWIJDER_ITEM)) {
+    // geen database actie?
+    //drupal_set_message('Verwijderen'); //debug
+    $nr_dagen = $form_state['input']['nr_dagen'];
+    //drupal_set_message("nr_slots: $nr_slots");
+    for ($i=0; $i < $nr_dagen; $i++) {
+      $dag = $form_state['input']['dagenlist']['dagen'][$i];
+      if (!empty($form_state['input']['dagenlist'][$i])) {
+        $checked = $form_state['input']['dagenlist'][$i];
+      }
+      else $checked = false;
+      if (!empty($form_state['input']['dagenlist']) && $checked) {
+        //remove dag
+        //drupal_set_message('delete dag ' .$form_state['input']['dagenlist']['dagen'][$i]); //debug
+        
+        $num_deleted = db_delete('ezac_Passagiers_Dagen')
+        ->condition('datum', $dag, '=')
+        ->execute();
+        
+        if ($num_deleted) {
+          drupal_set_message('Datum ' .$form_state['input']['dagenlist']['dagen'][$i] .' is verwijderd');
+        }
+      }
+    }
+    $form_state['rebuild'] = TRUE;
+  }
+  elseif ($op == t(DATUM_REEKS)) { // aanmaken datum reeks
+    $serie_start = $form_state['values']['serie_start'];
+    if (empty($serie_start)) {
+      form_set_error('serie_start', 'Geen datum ingevuld');
+      return;
+    }
+    // validate $dag field for valid date
+    $datum = explode('-', $serie_start);
+    if (!checkdate($datum[1], $datum[2], $datum[0])) {
+      form_set_error('serie_start', "datum $dag is onjuist");
+      return;
+    }
+    // check of reeks op een zaterdag begint
+    $weekday = date('l', strtotime($serie_start));
+    //dpm($weekday, 'weekday'); //debug
+    if ($weekday <> 'Saturday') {
+      form_set_error('serie_start', "datum reeks moet op een zaterdag beginnen");
+      return;
+    }
+    $datum2 = sprintf('%04u-%02u-%02u', $datum[0], $datum[1], $datum[2]);
+    // check whether dag already exists 
+    $exists = db_select('ezac_Passagiers_Dagen', 'd')
+      ->fields('d', array('datum'))
+      ->condition('d.datum', $datum2, '=')
+      ->execute()->rowCount();
+    if ($exists > 0) {
+      form_set_error('serie_start', "Datum $datum2 bestaat al");
+      return;
+    }
+    $serie_aantal = $form_state['values']['serie_aantal'];
+    if (!is_numeric($serie_aantal)) {
+      form_set_error('serie_aantal', "Ongeldig aantal weken $serie_aantal");
+      return;
+    }
+    if (intval($serie_aantal) < 2) {
+      form_set_error('serie_aantal', "Te weinig weken [$serie_aantal]");
+      return;
+    }
+    if (intval($serie_aantal) > 52) {
+      form_set_error('serie_aantal', "Te veel weken [$serie_aantal]");
+      return;
+    }
+  }
+  else { //opvoeren dag
+    $dag = $form_state['values']['dag'];
+    if (empty($dag)) {
+      form_set_error('dag', 'Geen datum ingevuld');
+      return;
+    }
+    // validate $dag field for valid date
+    $datum = explode('-', $dag);
+    if (!checkdate($datum[1], $datum[2], $datum[0])) {
+      form_set_error('dag', "datum $dag is onjuist");
+      return;
+    }
+    // @TODO - check op weekend
+    
+    $datum2 = sprintf('%04u-%02u-%02u', $datum[0], $datum[1], $datum[2]);
+    // check whether dag already exists 
+    $exists = db_select('ezac_Passagiers_Dagen', 'd')
+      ->fields('d', array('datum'))
+      ->condition('d.datum', $datum2, '=')
+      ->execute()->rowCount();
+      
+    if ($exists > 0) {
+      form_set_error('dag', "Datum $dag bestaat al");
+      return;
+    }
+  }
+  return;
+}
+
+function ezacpass_dagen_form_submit($form, &$form_state) {
+  // create slot in database
+  $op = $form_state['values']['op'];
+  if ($op == t(VERWIJDER_ITEM)) { //verwijderen datum
+    // geen database actie?
+  }
+  elseif ($op == t(DATUM_REEKS)) { //aanmaken datum reeks
+    $serie_start = $form_state['values']['serie_start'];
+    $serie_aantal = $form_state['values']['serie_aantal'];
+    $datum = $serie_start;
+    for ($i=0; $i<$serie_aantal; $i++) {
+      //aanmaken zaterdag
+      try {
+        $invoegen = db_insert('ezac_Passagiers_Dagen')
+        ->fields(array('datum' => $datum))
+        ->execute();
+      } catch (Exception $e) {
+        $message = $e->getMessage();
+        drupal_set_message("Datum $datum niet opnieuw aangemaakt");
+      }
+      // datum naar zondag
+      $datum = date('Y-m-d', strtotime($datum .' next day'));
+      //aanmaken zondag
+      try {
+        $invoegen = db_insert('ezac_Passagiers_Dagen')
+        ->fields(array('datum' => $datum))
+        ->execute();
+      } catch (Exception $e) {
+        $message = $e->getMessage();
+        drupal_set_message("Datum $datum niet opnieuw aangemaakt");
+      }
+      //datum naar volgende zaterdag
+      $datum = date('Y-m-d', strtotime($datum .' next saturday'));
+    }
+    drupal_set_message("$i weekends aangemaakt vanaf $serie_start");
+    return;
+  }
+  else { //opvoeren datum
+    $dag = $form_state['values']['dag'];
+    $datum = explode('-', $dag);
+    $datum2 = sprintf('%04u-%02u-%02u', $datum[0], $datum[1], $datum[2]);
+
+    $invoegen = db_insert('ezac_Passagiers_Dagen')
+    ->fields(array('datum' => $datum2))
+    ->execute();
+    drupal_set_message("Datum $datum2 toegevoegd");
+  }
+  return;
+}
+
+/**
+ * Helper function to show datum
+ */
+function ezacpass_show_date($datum) {
+  $dat_string = t(date('l', strtotime($datum))); // dag van de week
+  $dat_string .= " " .t(date('j', strtotime($datum))); // dag zonder nul
+  $dat_string .= " " .t(date('F', strtotime($datum))); // maand volledig
+  $dat_string .= " " .t(date('Y', strtotime($datum))); // jaar
+  return $dat_string;
+}
+
+/**
+ * Invoeren reservering
+ */
+function _ezacpass_reserveer() {
+  global $base_url;
+  
+  // Opschonen opties die zijn vervallen
+  $limit = date('Y-m-d G:i:s',time()-OPTIE_TIJD);
+  $opties = db_select('ezac_Passagiers', 'p')
+  ->fields('p')
+  ->condition('p.status', RESERVERING_OPTIE, '=')
+  ->condition('p.aangemaakt', $limit, '<')
+  ->execute()
+  ->fetchAll();
+
+  if (count($opties) > 0) {
+    foreach ($opties as $optie) {
+      $id = $optie->id;
+      $naam = $optie->naam;
+      $tijd = $optie->tijd;
+      $datum = $optie->datum;
+      $aangemaakt = $optie->aangemaakt;
+      $reden = "De reservering van $aangemaakt is niet op tijd bevestigd";
+      _ezacpass_verwijderen($id, $reden);
+      if (!empty($user->name)) { // toon alleen voor aangemelde gebruikers
+        drupal_set_message("Optie van $naam op $datum $tijd is vervallen wegens te late bevestiging", 'status');
+      }
+    }
+  }
+  
+  //toon lijst met beschikbare datums vanaf vandaag of eerste datum, per maand
+  $heden = date('Y-m-d');
+
+  //lees slot tijden uit ezac_Passagiers_Slots
+  $query = db_select('ezac_Passagiers_Slots', 's');
+  $query->fields('s',array('slot_tijd'));
+  $slots = $query->execute()->fetchCol();
+  $aantal_slots = count($slots);
+  
+  //lees beschikbare dagen uit ezac_Passagiers_Dagen vanaf $heden
+  $query = db_select('ezac_Passagiers_Dagen', 'd');
+  $query->fields('d',array('datum'));
+  $query->condition('d.datum', $heden, '>=');
+  $dagen = $query->execute()->fetchCol();
+  
+  foreach ($dagen as $dag) {
+    $plaatsen[$dag]['datum'] = $dag;
+    $plaatsen[$dag]['slots_vrij'] = $aantal_slots;
+    foreach ($slots as $slot) {
+      $plaatsen[$dag][$slot] = ''; // indicate free slot
+    }
+  }
+  //lees reserveringen uit ezac_Passagiers vanaf $heden
+  $query = db_select('ezac_Passagiers', 'p');
+  //$query->fields('p',array('id', 'datum', 'tijd', 'naam', 'telefoon', 'mail', 'aangemaakt', 'aanmaker', 'soort', 'status'));
+  $query->fields('p',array('datum', 'tijd', 'naam', 'status'));
+  $query->condition('p.datum', $heden, '>=');
+  $reserveringen = $query->execute()->fetchAll();
+
+  foreach ($reserveringen as $reservering) {
+    $dat = substr($reservering->datum, 0, 10); //skip anything after date
+    $tijd = substr($reservering->tijd, 0, 5); //skip seconds part
+    $plaatsen[$dat]['slots_vrij']--; // = $plaatsen[$dat]['slots_vrij'] - 1;
+    $plaatsen[$dat][$tijd] = $reservering->naam; // indicate used slot
+  }
+  //dpm($slots, '$slots'); //debug
+  //dpm($plaatsen, '$plaatsen'); //debug
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = '<p><h2>Kies een dag en tijd</h2></p>';
+  $form[0]['#markup'] .= "<p>Elke reservering geldt voor <strong>EEN (1)</strong> persoon";
+  $form[0]['#markup'] .= "<br>Indien meerdere personen willen meevliegen, dient voor iedere persoon";
+  $form[0]['#markup'] .= "<strong> apart</strong> een reservering te worden gemaakt</p>";
+  $form[0]['#weight'] = 0;
+  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
+  $form[0]['#suffix'] = '</div>';
+  // tabel datum/dag en slot tijden in header. 'vrij' in cel met link
+  //  table header
+    // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+    'width'	  => '90%');
+
+  //Set up the table Headings
+  $header[]['data'] = t('Datum');
+  foreach ($slots as $slot) {
+    $header[]['data'] = $slot;
+  }
+  foreach ($plaatsen as $plaats) {
+    // table rows
+    $dat = $plaats['datum'];
+    unset($col);
+    $col[] = t(date('D', strtotime($dat))) ." "// dag
+      .t(date('j', strtotime($dat))) ." "  // dd
+      .t(date('M', strtotime($dat))) ." "  // mmm
+      .t(date('Y', strtotime($dat))); // jjjj
+    foreach ($slots as $slot) {
+      $tijd = $slot;
+      if (empty($plaats[$tijd])) {
+         $col[] = "<a href=$base_url/passagiers/reserveer/$dat/$tijd>vrij</a>"; 
+      }
+      else $col[] = ''; // no link
+    }
+    $row[] = $col;
+  }
+  $form[1]['#theme'] = 'table';
+  $form[1]['#attributes'] = $attributes;
+  $form[1]['#header'] = $header;
+  $form[1]['#rows'] = $row;
+  $form[1]['#empty'] = t('Geen gegevens beschikbaar');
+  $form[1]['#weight'] = 1;
+
+  // maand vooruit en achteruit functie
+  
+  return $form;  
+}
+
+/**
+ * Callback function voor invoeren reservering
+ * @param varchar $datum datum van de reservering
+ * $param varchar $tijd tijd van de reservering
+ */
+function _ezacpass_reserveer_input($datum, $tijd) {
+  //kies datum/tijd via link /passagiers/reserveer/$datum/$tijd
+  //invullen reserveringsgegevens voor EEN persoon
+  //Sanitize inputs
+  // validate $dag field for valid date
+  $datum_delen = explode('-', $datum);
+  if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) {
+    drupal_set_message("Datum $datum is onjuist", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  $datum = sprintf('%04u-%02u-%02u', $datum_delen[0], $datum_delen[1], $datum_delen[2]);
+
+  // validate $tijd field for UU:MM format and valid time range
+  $tijd_delen = explode(':', $tijd);
+  if (!isset($tijd_delen[0])) {
+    drupal_set_message("Tijd $tijd is onjuist", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  if (!isset($tijd_delen[1])) {
+    drupal_set_message("Tijd $tijd is onjuist", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  if (intval($tijd_delen[1]) < 0) {
+    drupal_set_message("Tijd $tijd is onjuist", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  if (intval($tijd_delen[1]) > 59) {
+    drupal_set_message("Tijd $tijd is onjuist", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  $tijd = sprintf('%02u:%02u', $tijd_delen[0], $tijd_delen[1]);
+
+  //Check if slot exists
+  $exists = db_select('ezac_Passagiers_Dagen', 'd')
+    ->fields('d')
+    ->condition('d.datum', $datum, '=')
+    ->execute()->rowCount();
+  if ($exists == 0) {
+    drupal_set_message("Op $datum zijn reserveringen helaas niet mogelijk", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  $exists = db_select('ezac_Passagiers_Slots', 's')
+    ->fields('s')
+    ->condition('s.slot_tijd', $tijd, '=')
+    ->execute()->rowCount();
+  if ($exists == 0) {
+    drupal_set_message("Op $tijd is een reservering helaas niet mogelijk", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  
+  //Check slot free
+  $exists = db_select('ezac_Passagiers', 'p')
+    ->fields('p')
+    ->condition('p.tijd', $tijd, '=')
+    ->condition('p.datum', $datum, '=')
+    ->execute()->rowCount();
+  if ($exists > 0) {
+    drupal_set_message("Er is geen vlucht meer beschikbaar op $datum $tijd", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  
+  //Open form
+  return drupal_get_form('ezacpass_reserveer_form', $datum, $tijd);
+}
+
+/**
+ * Invoeren gegevens van passagier
+ * @param $form
+ * @param &$form_state
+ * @param $datum datum van de reservering
+ * @param $tijd  tijd  van de reservering
+ * @return $form
+ */
+function ezacpass_reserveer_form($form, &$form_state, $datum, $tijd) {
+  $datum_delen = explode('-', $datum);
+  $jaar  = $datum_delen[0];
+  if (isset($datum_delen[1])) $maand = $datum_delen[1];
+  if (isset($datum_delen[2])) $dag   = $datum_delen[2];
+ 
+  $dat_string = ezacpass_show_date($datum); // dag van de week
+  
+  $form['datum'] = array(
+    '#type' => 'hidden',
+    '#value' => $datum,
+  );
+  $form['tijd'] = array(
+    '#type' => 'hidden',
+    '#value' => $tijd,
+  );
+  
+  // create intro
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = '<p><h2>Reserveren meevliegen bij de EZAC</h2></p>';
+  $form[0]['#markup'] .= "<p><h3>Datum: $dat_string om $tijd</h3></p>";
+  $form[0]['#markup'] .= "<p>Geef de naam van <strong>EEN (1)</strong> passagier per reservering";
+  $form[0]['#markup'] .= "<br>Indien meerdere personen willen meevliegen, dient voor iedere persoon";
+  $form[0]['#markup'] .= "<strong> apart</strong> een reservering te worden gemaakt</p>";
+  $form[0]['#weight'] = 0;
+  $form[0]['#prefix'] = '<div class="reserveer-intro-div">';
+  $form[0]['#suffix'] = '</div>';
+  
+  $form['naam'] = array(
+  '#title' => t('Naam van de passagier'),
+  '#type' => 'textfield',
+//  '#default_value' => substr($start['start'], 0, 5),
+  '#description' => t('De naam voor op de reserveringslijst'),
+  '#maxlength' => 30,
+  '#required' => TRUE,
+  '#size' => 30,
+  '#weight' => 1,
+  '#prefix' => '<div class="reserveer-naam-div">',
+  '#suffix' => '</div>',
+  );
+  $form['telefoon'] = array(
+  '#title' => t('Telefoonnummer contactpersoon'),
+  '#type' => 'textfield',
+//  '#default_value' => substr($start['start'], 0, 5),
+  '#description' => t('Het nummer waarop je het best bereikbaar bent voor eventuele wijzigingen'),
+  '#maxlength' => 20,
+  '#required' => TRUE,
+  '#size' => 20,
+  '#weight' => 2,
+  '#prefix' => '<div class="reserveer-telefoon-div">',
+  '#suffix' => '</div>',
+  );
+  $form['email'] = array(
+  '#title' => t('E-mail'),
+  '#type' => 'textfield',
+//  '#default_value' => substr($start['start'], 0, 5),
+  '#description' => t('E-mail adres voor de bevestiging'),
+  '#maxlength' => 30,
+  '#required' => TRUE,
+  '#size' => 30,
+  '#weight' => 3,
+  '#prefix' => '<div class="reserveer-mail-div">',
+  '#suffix' => '</div>',
+  );
+  $form['gevonden'] = array(
+  '#title' => t('Hoe heb je ons gevonden?'),
+  '#type' => 'textfield',
+//  '#default_value' => substr($start['start'], 0, 5),
+  '#description' => t('Geef svp aan hoe je de EZAC hebt gevonden'),
+  '#maxlength' => 30,
+  '#required' => FALSE,
+  '#size' => 30,
+  '#weight' => 4,
+  '#prefix' => '<div class="reserveer-mail-div">',
+  '#suffix' => '</div>',
+  );
+  $form['mail_list'] = array(
+  '#title' => t('Wil je in de toekomst ook berichten van de EZAC ontvangen?'),
+  '#type' => 'checkbox',
+  '#default_value' => 1,
+//  '#description' => t('Dit kun je bij elk bericht uitzetten'),
+  '#weight' => 5,
+  '#prefix' => '<div class="reserveer-mail-div">',
+  '#suffix' => '</div>',
+  );
+  
+  $form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('Reserveer deze vlucht'),
+  '#weight' => 10,
+  '#prefix' => '<div class="reserveer-submit-div">',
+  '#suffix' => '</div>',
+  );
+  
+  return $form;
+}
+
+function ezacpass_reserveer_form_validate($form, &$form_state) {
+  //validate naam
+  //validate telefoon
+  $phone = $form_state['values']['telefoon'];
+  if (strlen($phone) > 0) {
+    $phone = str_replace (' ', '', $phone);
+    //$phone = str_replace ('-', '', $phone);
+    $phone = str_replace ('(', '', $phone);
+    $phone = str_replace (')', '', $phone);
+    $phone = str_replace ('[', '', $phone);
+    $phone = str_replace (']', '', $phone);
+    $phone = str_replace ('{', '', $phone);
+    $phone = str_replace ('}', '', $phone);
+    $form_state['values']['telefoon'] = $phone; // clean up number
+  }
+  //validate mail
+  $email = $form_state['values']['email'];
+  if (!valid_email_address($email)) {
+    form_set_error('mail', t("$email is een ongeldig mail adres"));
+  }
+}
+
+function ezacpass_reserveer_form_submit($form, &$form_state) {
+  $CRLF = '\r\n';
+  
+  // vastleggen reservering
+  global $user;
+  global $base_url;
+  $naam = $form_state['values']['naam'];
+  $phone = $form_state['values']['telefoon'];
+  $email = $form_state['values']['email'];
+  $datum = $form_state['values']['datum'];
+  $tijd = $form_state['values']['tijd'];
+  $gevonden = $form_state['values']['gevonden'];
+  $mail_list = $form_state['values']['mail_list'];
+  
+  if (isset($user->name)) {
+    $status = RESERVERING_BEVESTIGD; // indien door EZAC lid ingegeven is bevestiging niet nodig
+  }
+  else {
+    $status = RESERVERING_OPTIE; // indien door gast ingegeven is bevestiging wel nodig
+  }
+  
+  $fields = array(
+    'datum' => $datum,
+    'tijd' => $tijd,
+    'naam' => $naam,
+    'telefoon' => $phone,
+    'mail' => $email,
+    'aanmaker' => (isset($user->name)) ? $user->name : 'anoniem',
+    'soort' => 'passagier',
+    'status' => $status,
+    'gevonden' => $gevonden,
+    'mail_list' => $mail_list,
+    );
+
+  $mail_keuze = ($mail_list == 1) ? t("WEL") : t("NIET");
+  
+  $id = db_insert('ezac_Passagiers')
+  ->fields($fields)
+  ->execute();
+
+  // versturen bevestiging met link en sleutel voor wijziging / annulering
+  //   aanmaken sleutel met hash functie
+  $hash_fields = array(
+    'id' => $id,
+    'datum' => $datum,
+    'tijd' => $tijd,
+    'naam' => $naam,
+    'mail' => $email,
+    'telefoon' => $phone,
+    );
+  $data = implode('/', $hash_fields);
+  $hash = drupal_hash_base64($data);
+
+  $eindtijd = date('G:i', strtotime('+1H')); // 1 uur na nu
+  
+  // passagiers/edit/id/datum/tijd/naam/telefoon/hash
+  $url_bevestiging = $base_url ."/passagiers/confirm/$id/$hash";
+  $url_verwijderen = $base_url ."/passagiers/delete/$id/$hash";
+  $show_datum = ezacpass_show_date($datum);
+  // Maak boarding card met disclaimer tekst (pdf)
+  //   disclaimer tekst in disclaimer.txt file
+  //   EZAC logo in ezaclogo.jpg
+  //   Aanmaken html file met de juiste elementen, opmaak met css
+  $subject = "Reservering meevliegen EZAC op $show_datum $tijd";
+  unset($body);
+  $body  = "<html><body>";
+  $body .= "<p>Er is voor $naam een reservering voor meevliegen bij de EZAC aangemaakt";
+  $body .= "<br>Deze reservering geldt voor 1 persoon";
+  $body .= "<br>";
+  $body .= "<br>De reservering is voor $show_datum om $tijd";
+  $body .= "<br>Graag een kwartier van tevoren aanwezig zijn (Justaasweg 5 in Axel)";
+  $body .= "<br>";
+  if ($status == RESERVERING_OPTIE) {
+    $body .= "<br>Deze reservering dient <strong>voor $eindtijd<strong> te worden bevestigd, anders vervalt deze.";
+    $body .= "<br>Bevestig via <a href=$url_bevestiging>DEZE LINK</a>";
+    $body .= "<br>";
+  }
+  $body .= "<br>Mocht het niet mogelijk zijn hiervan gebruik te maken, dan kan deze reservering";
+  $body .= "<br>via <a href=$url_verwijderen>DEZE LINK</a> worden geannuleerd ";
+  $body .= "<br>";
+  $body .= "<br>Je hebt aangegeven $mail_keuze op de EZAC mailing list te willen";
+  $body .= "<br>";
+  $body .= "<br>Voor verdere contact gegevens: zie de <a href=http://www.ezac.nl>EZAC website</a>";
+  $body .= "<br>";
+  $body .= "<br>Met vriendelijke groet,";
+  $body .= "<br>Eerste Zeeuws Vlaamse Aero Club";
+  $body .= "</body></html>";
+  //   Genereren PDF
+  //   Mailen PDF als attachment of download via button
+  _ezacpass_mail($email, $subject, $body);
+  
+  //drupal_set_message("Reservering $id aangemaakt met code $hash", 'status');
+
+  // toon bevestiging
+  $form_state['redirect'] = "passagiers/bevestigen/$id";
+}
+
+/**
+ * Toon status van reservering
+ * $param $id id van ezac_Passagiers record
+ */
+function _ezacpass_bevestig($id) {
+  return drupal_get_form('ezacpass_bevestig_form', $id);
+}
+
+function ezacpass_bevestig_form($form, &$form_state, $id) {
+   $reservering = db_select('ezac_Passagiers', 'p')
+  ->fields('p')
+  ->condition('p.id', $id, '=')
+  ->execute()
+  ->fetchAll();
+  
+  if (count($reservering) <> 1) {
+    drupal_set_message("Reservering $id NIET gevonden", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  $naam = $reservering[0]->naam;
+  $datum = ezacpass_show_date($reservering[0]->datum);
+  $tijd = $reservering[0]->tijd;
+  $email = $reservering[0]->mail;
+  $status = $reservering[0]->status;
+  $aangemaakt = $reservering[0]->aangemaakt;
+  
+  $eindtijd = date('G:i', strtotime($aangemaakt)+OPTIE_TIJD);
+  
+  $form[0]['#type'] = "markup";
+  $form[0]['#markup'] = "De reservering op $datum $tijd voor $naam ";
+  if ($status == RESERVERING_OPTIE) {
+      $form[0]['#markup'] .= "is als <strong>OPTIE</strong> vastgelegd";
+      $form[0]['#markup'] .= "<br>Hiervoor is een bericht verstuurd naar $email";
+      $form[0]['#markup'] .= "<br>Bevestig deze reservering <strong>voor $eindtijd</strong> via de link in deze mail";
+  }
+  else {
+      $form[0]['#markup'] .= "is door ons vastgelegd";
+      $form[0]['#markup'] .= "<br>Hiervoor is een bericht verstuurd naar $email";
+  }
+  $form[0]['#prefix'] = '<div class="ezacpass-bevestig-div">';
+  $form[0]['#suffix'] = '</div>';
+  
+  $form[1]['#type'] = 'submit';
+  $form[1]['#value'] = t('Nog een reservering');
+
+  $form[2]['#type'] = 'submit';
+  $form[2]['#value'] = t('Klaar');
+  
+  return $form;  
+}
+
+function ezacpass_bevestig_form_submit($form, &$form_state) {
+  if ($form_state['values']['op'] == t('Klaar')) {
+    $form_state['redirect'] = '';
+  }
+  else {
+    $form_state['redirect'] = 'passagiers/reservering';
+  }
+  return;
+}
+
+/**
+ *Confirm passagiers reservering
+ *@param $id id of Passagiers record
+ *@param $hash sha256 hash over Passagier fields
+ */
+function _ezacpass_confirm($id, $hash) {
+  // $hash ingevuld?
+  if (!isset($hash) || empty($hash)) {
+    drupal_set_message("Code voor reservering $id ontbreekt", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  // read reservering record
+  $reserveringen = db_select('ezac_Passagiers', 'p')
+  ->fields('p') //select *
+  ->condition('p.id', $id, '=')
+  ->execute()
+  ->fetchAll();
+  
+  if (count($reserveringen) == 0) {
+    drupal_set_message("Reservering $id niet gevonden", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+
+  $reservering = $reserveringen[0]; //get single result
+  
+  $datum    = substr($reservering->datum, 0,10);
+  $tijd     = substr($reservering->tijd, 0, 5); //skip seconds
+  $naam     = $reservering->naam;
+  $telefoon = $reservering->telefoon;
+  $email    = $reservering->mail;
+  
+  $hash_fields = array(
+  'id' => $id,
+  'datum' => $datum,
+  'tijd' => $tijd,
+  'naam' => $naam,
+  'mail' => $email,
+  'telefoon' => $telefoon,
+  );
+  $data = implode('/', $hash_fields);
+  $show_datum = ezacpass_show_date($datum);
+  $calculated_hash = drupal_hash_base64($data);
+  if ($calculated_hash <> $hash) {
+    drupal_set_message("Onjuiste code voor reservering $id", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  // update reservering record
+  $result = db_update('ezac_Passagiers')
+  ->fields(array('status' => 'bevestigd'))
+  ->condition('id', $id)
+  ->execute();
+  if ($result == 1) {
+    drupal_set_message("Je reservering op $show_datum $tijd is bevestigd", 'status');
+    //@TODO send confirmation mail
+  }
+  else {
+    drupal_set_message("Bevesting van reservering $id is NIET gelukt ($result)", 'error');
+    //@TODO send error mail
+  }
+  drupal_goto("passagiers/bevestigen/$id");
+}
+
+/**
+ *Delete passagiers record
+ *@param $id id of Passagiers record
+ *@param $hash sha256 hash over Passagier fields
+ */
+function _ezacpass_delete($id, $hash) {
+  // $hash ingevuld?
+  if (!isset($hash) || empty($hash)) {
+    drupal_set_message("Code voor reservering $id ontbreekt", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  // read reservering record
+  $reserveringen = db_select('ezac_Passagiers', 'p')
+  ->fields('p') //select *
+  ->condition('p.id', $id, '=')
+  ->execute()
+  ->fetchAll();
+  
+  if (count($reserveringen) == 0) {
+    drupal_set_message("Reservering $id niet gevonden", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+
+  $reservering = $reserveringen[0]; //get single result
+  
+  $datum    = substr($reservering->datum, 0,10);
+  $tijd     = substr($reservering->tijd, 0, 5); //skip seconds
+  $naam     = $reservering->naam;
+  $telefoon = $reservering->telefoon;
+  $email    = $reservering->mail;
+  
+  $hash_fields = array(
+  'id' => $id,
+  'datum' => $datum,
+  'tijd' => $tijd,
+  'naam' => $naam,
+  'mail' => $email,
+  'telefoon' => $telefoon,
+  );
+  $data = implode('/', $hash_fields);
+
+  $calculated_hash = drupal_hash_base64($data);
+  if ($calculated_hash <> $hash) {
+    drupal_set_message("Onjuiste code voor reservering $id", 'error');
+    drupal_goto('passagiers/reservering');
+  }
+  return drupal_get_form('ezacpass_delete_form', $reservering);
+}
+
+/**
+* Verification for Passagier delete function
+* @param form
+* @param &$form_state
+* @param stdObject $reservering id datum tijd naam mail telefoon
+*/
+function ezacpass_delete_form($form = NULL, &$form_state, $reservering) {
+  // build form for passagier edit
+  // velden: id datum tijd naam telefoon mail aangemaakt aanmaker soort
+  $id = $reservering->id;
+  $datum = substr($reservering->datum, 0, 10);
+  $tijd = substr($reservering->tijd, 0, 5); //skip seconds
+  $naam = $reservering->naam;
+  $email = $reservering->mail;
+  $show_datum = ezacpass_show_date($datum);
+  //ask user for mail address used with the reservation
+  //this is the confirmation that we have the user has access rights for this reservation
+
+  //check mail entered with mail on record in validate
+  //when ok proceed to delete option
+  
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = '<p>Verwijderen reservering></p>';
+  $form[0]['#weight'] = 0;
+  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
+  $form[0]['#suffix'] = '</div>';
+   
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = "<p><h2>Reservering $id van $show_datum $tijd verwijderen voor $naam</h2></p>";
+  $form[0]['#weight'] = 1;
+  $form[0]['#prefix'] = '<div class="ezacpass-delete-div">';
+  $form[0]['#suffix'] = '</div>';
+  
+  $form['id'] = array(
+  '#title' => 'id',
+  '#type' => 'hidden',
+  '#value'=> $id
+  );
+  $form['datum'] = array(
+  '#title' => 'Datum',
+  '#type' => 'hidden',
+  '#value' => $datum,
+  );
+  $form['tijd'] = array(
+  '#title' => 'Tijd',
+  '#type' => 'hidden',
+  '#value' => $tijd,
+  );
+  $form['naam'] = array(
+  '#title' => 'Naam',
+  '#type' => 'hidden',
+  '#value' => $naam,
+  );
+  $form['mail'] = array(
+  '#title' => 'E-mail',
+  '#type' => 'hidden',
+  '#value' => $email,
+  );
+  $form['mail_check'] = array(
+  '#title' => t('Geef ter bevestiging je E-mail adres'),
+  '#type' => 'textfield',
+//  '#default_value' => substr($start['start'], 0, 5),
+  '#description' => t('E-mail adres'),
+  '#maxlength' => 30,
+  '#required' => TRUE,
+  '#size' => 30,
+  '#weight' => 2,
+//  '#prefix'] => '<div class="ezacpass-delete-div">';
+//  '#suffix'] => '</div>';
+  );
+  
+  $form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('Verwijder reservering'),
+  '#weight' => 3,
+  );
+  
+  return $form;
+}
+
+
+/**
+* Validate the form.
+*/
+function ezacpass_delete_form_validate($form, &$form_state) {
+  // validate e-mail with value in database
+  if ($form_state['values']['mail'] <> $form_state['values']['mail_check']) {
+    form_set_error('mail_check', 'Onjuist mail adres - reservering is NIET verwijderd');
+    return;
+  }
+}
+
+/**
+* Handle post-validation form submission.
+*/
+function ezacpass_delete_form_submit($form, &$form_state) {
+  global $base_url;
+  $id    = $form_state['values']['id'];
+  $datum = ezacpass_show_date($form_state['values']['datum']);
+  $tijd  = $form_state['values']['tijd'];
+  $naam  = $form_state['values']['naam'];
+  $email = $form_state['values']['mail'];
+  
+  $result = db_delete('ezac_Passagiers')
+  ->condition('id', $id)
+  ->execute();
+
+  if ($result == 1) {
+    drupal_set_message("Reservering $id is verwijderd", 'status');
+    //mail bevestiging van verwijdering 
+    $url_reservering = $base_url ."/passagiers";
+    $subject = "Reservering meevliegen EZAC op $datum $tijd is GEANNULEERD";
+    unset($body);
+    $body  = "<html><body>";
+    $body .= "<p>De reservering voor meevliegen bij de EZAC voor $naam op $datum $tijd is geannuleerd";
+    $body .= "<br>";
+    $body .= "<br>Via <a href=$url_reservering>DEZE LINK</a> kan een nieuwe reservering worden gemaakt";
+    $body .= "<br>";
+    $body .= "<br>Voor verdere contact gegevens: zie de <a href=http://www.ezac.nl>EZAC website</a>";
+    $body .= "<br>";
+    $body .= "<br>Met vriendelijke groet,";
+    $body .= "<br>Eerste Zeeuws Vlaamse Aero Club";
+    $body .= "</body></html>";
+    _ezacpass_mail($email, $subject, $body);
+  }
+  else drupal_set_message("Reservering $id is NIET verwijderd", 'error');
+  $form_state['redirect'] = 'passagiers/reservering';
+  return;  
+}
+
+/**
+ * Verwijder reservering via website (ingelogd)
+ * @param $id
+ */
+function _ezacpass_verwijder($id) {
+  return drupal_get_form('ezacpass_verwijder_form', $id);  
+}
+
+function ezacpass_verwijder_form($form, &$form_state, $id) {
+  $reservering = db_select('ezac_Passagiers', 'p')
+  ->fields('p')
+  ->condition('p.id', $id, '=')
+  ->execute()
+  ->fetchAll();
+  if (count($reservering) <> 1) {
+    drupal_set_message("Reservering $id niet gevonden", 'error');
+    drupal_goto('passagiers');
+  }
+  $datum = ezacpass_show_date($reservering[0]->datum);
+  $tijd = substr($reservering[0]->tijd, 0, 5);
+  $naam = $reservering[0]->naam;
+  $telefoon = $reservering[0]->telefoon;
+  $email = $reservering[0]->mail;
+  
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = "<p><h2>Verwijderen reservering $id</h2></p>";
+  $form[0]['#weight'] = 0;
+  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
+  $form[0]['#suffix'] = '</div>';
+  
+  $form[1]['#type'] = 'markup';
+  $form[1]['#markup'] = "<p>Datum: $datum om $tijd";
+  $form[1]['#markup'] .= "<br>Naam: $naam";
+  $form[1]['#markup'] .= "<br>Telefoon: $telefoon";
+  $form[1]['#markup'] .= "<br>E-mail: $email</p>";
+  $form[1]['#weight'] = 1;
+
+  // Eventueel kan hier nog een reden voor de annulering worden gevraagd
+  // Deze kan dan in de mail worden meegezonden
+
+  $form['reden']['#type'] = 'textfield';
+  $form['reden']['#title'] = 'Geef de reden voor de annulering';
+  $form['reden']['#maxlength'] = 30;
+  $form['reden']['#size'] = 30;
+  $form['reden']['#weight'] = 2;
+  
+  $form[2]['#type'] = 'markup';
+  $form[2]['#markup'] = "<p><h2>Verwijder de reservering alleen als de passagier is geinformeerd</h2>";
+  $form[2]['#prefix'] = '<div class="ezacpass-intro-div">';
+  $form[2]['#suffix'] = '</div>';
+  $form[2]['#weight'] = 3;
+
+  $form['id'] = array(
+    '#type'=> 'hidden',
+    '#value'=> $id,
+  );
+  
+  $form['remove'] = array(
+  '#type'  => 'submit',
+  '#value' => t('Verwijder reservering'),
+  '#weight' => 4,
+  );
+  
+  $form['cancel'] = array(
+  '#type'  => 'submit',
+  '#value' => t('Annuleren'),
+  '#weight' => 5,
+  );
+  return $form;
+}
+
+function ezacpass_verwijder_form_submit($form, &$form_state) {
+  
+  if ($form_state['values']['op'] == 'Verwijder reservering') {
+    $id = $form_state['values']['id'];
+    $reden = $form_state['values']['reden'];
+    _ezacpass_verwijderen($id, $reden);
+  }
+  else {
+    drupal_set_message("Geen reservering verwijderd", 'status');
+  }
+    
+  $form_state['redirect'] = 'passagiers';
+  return;
+}
+/**
+ * Verwijder een reservering
+ * $param $id id of reservering
+ * $param $reden reden van annulering
+ */
+function _ezacpass_verwijderen($id, $reden) {
+  global $base_url;
+  //lees record
+  $reservering = db_select('ezac_Passagiers', 'p')
+  ->fields('p')
+  ->condition('p.id', $id, '=')
+  ->execute()
+  ->fetchAll();
+  
+  $result = db_delete('ezac_Passagiers')
+  ->condition('id', $id)
+  ->execute();
+  if ($result == 1) {
+    drupal_set_message("Reservering $id is verwijderd", 'status');
+  }
+  else {
+    drupal_set_message("Reservering $id is NIET verwijderd ($result)", 'error');
+  }
+  // Stuur bericht van verwijdering naar passagier
+  if (isset($reservering[0]->mail)) {
+    $naam = $reservering[0]->naam;
+    $datum = ezacpass_show_date($reservering[0]->datum);
+    $tijd = substr($reservering[0]->tijd, 0, 5);
+    $subject = "Je reservering voor meevliegen bij de EZAC is vervallen";
+    $body = "<p>Beste $naam,";
+    $body .= "<br>Je reservering voor meevliegen bij de EZAC op $datum $tijd is helaas vervallen";
+    if (!empty($reden)) {
+      $body .= "<BR>De reden hiervoor is $reden";
+    }
+    $body .= "<br>";
+    $body .= "<br>Om een nieuwe reservering te maken kun je ";
+    $body .= "<a href=$base_url/passagiers>DEZE LINK</a> gebruiken";
+    $body .= "<br>";
+    $body .= "<br>Met vriendelijke groet,";
+    $body .= "<br>Eerste Zeeuws Vlaamse Aero Club";
+    _ezacpass_mail($reservering[0]->mail, $subject, $body);
+  }
+}
+
+/**
+ * Passagiers dit jaar
+ **/
+function _ezacpass_dag() {
+  $datum = date('Y-m-d');
+  return drupal_get_form('ezacpass_display_form', $datum);
+}
+
+/**
+ * Passagiers vandaag
+ **/
+function _ezacpass_jaar() {
+  $datum = date('Y');
+  return drupal_get_form('ezacpass_display_form', $datum);
+}
+
+/**
+ * passagiers deze maand
+ * @TODO: generiek maken van keuze voor dag, maand en jaar in display form
+ */
+function _ezacpass_maand() {
+  $datum = date('Y-m');
+  return drupal_get_form('ezacpass_display_form', $datum);
+}
+function ezacpass_display_form($form, &$form_state, $datum) {
+  
+  //@TODO - inbouwen annuleringsfunctie (link of checkbox)
+  
+  //lees reserveringen uit ezac_Passagiers vanaf $datum
+  $reserveringen = _ezacpass_retrieve('*', $datum);
+
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = "<p>Passagiers van $datum</p>";
+  $form[0]['#weight'] = 0;
+  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
+  $form[0]['#suffix'] = '</div>';
+  
+  $form[1]['#type'] = 'markup';
+  $form[1]['#markup'] = "<p><h2>Klik op de tijd om een reservering te verwijderen</h2></p>";
+  $form[1]['#weight'] = 1;
+//  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
+//  $form[0]['#suffix'] = '</div>';
+
+  //  table header
+  // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+    'width'	  => '90%');
+
+  //Set up the table Headings
+  $header = array(
+    array('data' => t('Datum')),
+    array('data' => t('Tijd')),
+    array('data' => t('Naam<br>Hoe gevonden?')),
+    array('data' => t('Telefoon')),
+    array('data' => t('E-mail<br>Op mail-list?')),
+    array('data' => t('Status')),
+  );
+
+  foreach ($reserveringen as $reservering) {
+    $id = $reservering->id;
+    $tijd = substr($reservering->tijd, 0, 5); //skip seconds part
+    $mail_keuze = ($reservering->mail_list == 1) ? "Ja" : "Nee";
+    // table rows
+    $row[] = array(
+      //$reservering->id,
+      ezacpass_show_date($reservering->datum),
+      "<a href=verwijder/$id>$tijd</a>",
+      $reservering->naam ."<br>" .$reservering->gevonden,
+      $reservering->telefoon,
+      $reservering->mail ."<br>" .$mail_keuze,
+      //$reservering->soort,
+      $reservering->status,
+    );
+  }
+  $form[2]['#theme'] = 'table';
+  $form[2]['#attributes'] = $attributes;
+  $form[2]['#header'] = $header;
+  $form[2]['#rows'] = (isset($row)) ? $row : null;
+  $form[2]['#empty'] = t('Geen gegevens beschikbaar');
+  $form[2]['#weight'] = 2;
+  return $form;  
+
+}
+
+function ezacpass_display_form_submit($form, &$form_state) {
+  //empty
+}
+
+
+/**
+ * Sends a simple email.
+ * [or] Tested on 2012-05-31 using Drupal 7.12
+ *
+ * Usage:
+ * 1) Paste all the below code into your module or include
+ * 2) Configure the two @FIXME's.
+ * 3) Visit /_custom_simple_mail to get an email.
+ *
+ * Credits:
+ * @see http://api.drupal.org/api/drupal/includes%21mail.inc/function/drupal_mail_system/7#comment-17489
+ * @see http://www.midwesternmac.com/blogs/jeff-geerling/wrapper-function-simple
+ *
+ */
+/**
+ * Send a simple email to specified recipient.
+ *
+ * @param string $message_subject
+ * @param string $message_body
+ */
+function _ezacpass_mail($to, $message_subject, $message_body) {
+  $my_email = 'webmaster@ezac.nl';
+  
+  // These value can remain empty.
+  $my_module = 'ezacpass';
+  $my_mail_token = 'reservering';
+  
+  $from = variable_get('system_mail', $my_email);
+  $message = array(
+    'id' => $my_module . '_' . $my_mail_token,
+    'module' => $my_module, // evert
+    'key' => $my_mail_token, //evert
+    'to' => $to,
+    'bcc' => $my_email,
+    'from' => $my_email,
+    'subject' => $message_subject,
+    'body' => array($message_body),
+    'headers' => array(
+      'From' => $from,
+      'Sender' => $from,
+      'Return-Path' => $from,
+      'MIME-Version' => '1.0',
+      'Content-Type' => 'text/html; charset=UTF-8; format=flowed; delsp=yes',
+      'Content-Transfer-Encoding' => '8Bit',
+      'X-Mailer' => 'Drupal',
+    ),
+  );
+  $system = drupal_mail_system($my_module, $my_mail_token);  
+
+// The format function must be called before calling the mail function. 
+  $message = $system->format($message);
+  //dpm($message, 'formatted message'); // debug
+  if ($system->mail($message)) {
+    //drupal_set_message("Mail verzonden naar $to");
+  }
+  else {
+    drupal_set_message("Mail verzending naar $to [$subject] mislukt", 'error');
+  }
+}

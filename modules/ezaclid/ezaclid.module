@@ -1,0 +1,633 @@
+<?php
+// $Id$
+
+
+/**
+*  ezaclid module v 7.x-1.0
+*  Form: user enters Voornaam, Achternaam
+*  From the ezac_Leden table, addresses are selected and 
+*  displayed in a themed table.
+*  Photo's are selected from /drupalpics/leden based on name and jpg suffix
+*/
+
+
+/**
+* Implementation of hook_permission().
+*/
+function ezaclid_permission() {
+  return array(
+    'ledenlijst' => array(
+      'title' => t('EZAC ledenlijst inzien'),
+      'description' => t('Opzoeken EZAC leden.'),
+    ),
+    'etiket' => array(
+      'title' => t('EZAC ledenlijst etiketten download'),
+      'description' => t('Download etiketten bestand.'),
+    ),
+    'email' => array(
+      'title' => t('EZAC ledenlijst e-mail adressen'),
+      'description' => t('Opvragen EZAC e-mail adressen.'),
+    ),
+  );
+}
+/**
+* Implementation of hook_menu().
+*/
+function ezaclid_menu() {
+$items = array();
+	$items['ledenlijst'] = array(
+	  'title' => 'EZAC ledenlijst',
+	  'description'=> 'Opzoeken EZAC leden informatie',
+	  'page callback' => 'ezaclid_page',
+	  'page arguments' => '',
+	  'type' => MENU_NORMAL_ITEM,
+	  'access callback' => 'user_access',
+      'access arguments' => array('ledenlijst')
+	);
+	$items['ledenlijst/lijst'] = array(
+	  'title' => 'EZAC ledenlijst',
+	  'page callback' => 'ezaclid_page',
+	  'access arguments' => array('ledenlijst'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => 0
+	);
+    $items['ledenlijst/display'] = array(
+	  'title' => 'EZAC ledenlijst',
+	  'page callback' => 'ezaclid_display_page',
+	  'page arguments' => array(2, 3),
+      'access arguments' => array('ledenlijst'),
+ 	  'type' => MENU_CALLBACK
+	);
+	$items['ledenlijst/etiket'] = array(
+        'title' => 'Etiketten',
+        'page callback' => 'ezaclid_etiket',
+        'type' => MENU_LOCAL_TASK,
+        'access arguments' => array('etiket'),
+        'weight' => 1
+        );
+    $items['ledenlijst/etiket/produce'] = array(
+	  'title' => 'EZAC etiketten',
+      'page arguments' => array(3, 4),
+	  'page callback' => 'ezaclid_etiket_produce',
+      'access arguments' => array('etiket'),
+	  'type' => MENU_CALLBACK
+	);
+    $items['ledenlijst/email'] = array(
+        'title' => 'E-mail',
+        'page callback' => 'ezaclid_email',
+	    'page arguments' => array(2),
+	    'type' => MENU_LOCAL_TASK,
+        'access arguments' => array('email'),
+        'weight' => 2
+        );
+    $items['ledenlijst/email/produce'] = array(
+	  'title' => 'EZAC e-mail adressen',
+      'page arguments' => array(3, 4), // selectie, opmaak
+	  'page callback' => 'ezaclid_email_produce',
+      'access arguments' => array('email'),
+	  'type' => MENU_CALLBACK
+	  );
+
+return $items;
+}
+
+/**
+* Called when user goes to example.com/?q=ledenlijst
+*/
+function ezaclid_page() {
+drupal_set_message(t('Zoek namen in de EZAC ledenlijst'));
+// Return the HTML generated from the $form data structure.
+$output = drupal_get_form('ezaclid_name_form');
+return $output;
+}
+
+function ezaclid_etiket() {
+$output = drupal_get_form('ezaclid_etiket_form');
+return $output;
+}
+
+function ezaclid_email() {
+$output = drupal_get_form('ezaclid_email_form');
+return $output;
+}
+
+/**
+* Defines the Ledenlijst Naam selection form.
+*/
+function ezaclid_name_form($form, &$form_state) {
+$form['Voornaam'] = array(
+'#title' => t('Voornaam'),
+'#type' => 'textfield',
+'#description' => t('Geef de gezochte voornaam'),
+);
+$form['Achternaam'] = array(
+'#title' => t('Achternaam'),
+'#type' => 'textfield',
+'#description' => t('Geef de gezochte achternaam'),
+);
+$form['submit'] = array(
+'#type' => 'submit',
+'#value' => t('Zoek')
+);
+$form['search_results'] = array(
+'#type' => 'value',
+'#value' => array()
+);
+return $form;
+}
+
+/**
+* Validate the form.
+*/
+function ezaclid_name_form_validate($form, &$form_state) {
+
+$Voornaam = $form_state['values']['Voornaam'];
+$Achternaam = $form_state['values']['Achternaam'];
+
+//Geen * maar % als wildcard gebruiken
+if ($Achternaam == '*') {
+   // We notify the form API that this field has failed validation.
+   form_set_error(t('Use % for wildcard instead of *'));
+   }
+
+//Niet zoeken zonder argumenten
+if ($Voornaam . $Achternaam == "") {
+   // We notify the form API that this field has failed validation.
+   form_set_error(t('Je moet wel een naam invullen...'));
+   }
+}
+
+/**
+* Handle post-validation form submission.
+*/
+function ezaclid_name_form_submit($form, &$form_state) {
+
+  $Voornaam = $form_state['values']['Voornaam'];
+  $Achternaam = $form_state['values']['Achternaam'];
+
+  $form_state['redirect'] = 'ledenlijst/display/'.$Voornaam .'/' .$Achternaam;
+}
+
+/**
+* redirected from ezaclid_name_form_submit
+*/
+function ezaclid_display_page($Voornaam = "", $Achternaam ="") {
+
+  // Verwijder voorvoegsels
+  if (strrchr($Achternaam, " ")) $Achternaam = trim(strrchr ($Achternaam, " "));
+
+  unset($tokens);
+
+  $query  = 'SELECT VOORNAAM, VOORVOEG, ACHTERNAAM, ADRES, POSTCODE, PLAATS, ';
+  $query .= 'TELEFOON, MOBIEL, LAND, E_Mail, CODE ';
+  $query .= 'FROM {ezac_Leden} WHERE ';
+  if ($Voornaam <> "") {
+	  $query .= 'VOORNAAM LIKE :Voornaam '; 
+	  $tokens[':Voornaam'] = '%' .$Voornaam .'%'; }
+  if ($Voornaam <> "" and $Achternaam <> "") {
+	  $query .= 'AND ';}
+  if ($Achternaam <> "") {
+	  $query .= 'ACHTERNAAM LIKE :Achternaam'; 
+	  $tokens[':Achternaam'] = '%' .$Achternaam .'%'; }
+  $query .= ' AND Actief AND ';
+  $query .= 'CODE IN (:Code)';
+  $tokens[':Code'] = array('AL', 'VL', 'AVL', 'DO');
+  //$query .= 'CODE = 'AL' OR '; // mogelijk kan hier ook een array('AL', 'VL', 'AVL', 'DO') als token voor :Code
+  //$query .= 'CODE = 'VL' OR ';
+  //$query .= 'CODE = 'AVL' OR ';
+    //$query .= 'CODE = 'DB' OR ';
+    //$query .= 'CODE = 'OL' OR ';
+    //$query .= 'CODE = 'CL' OR ';
+  //$query .= 'CODE = 'DO')';
+
+  $query .= ' ORDER by ACHTERNAAM, POSTCODE, CODE';
+
+  $result = db_query ($query, $tokens);
+
+  //Toon aanwezige records
+
+  // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+  //  'class'       => 'example',
+    'width'	=> '90%'
+  );
+
+  //Set up the table Headings
+  $header = array(
+	  array('data' => t('Naam')),
+	  array('data' => t('Adres')),
+  //        array('data' => t('Postcode')),
+  //		array('data' => t('Plaats')),
+		  array('data' => t('Telefoon')),
+  //		array('data' => t('Land')),
+		  array('data' => t('E-mail')),
+		  array('data' => t('Code')),
+		  array('data' => t('Foto'))
+		  );
+
+  while ($line = $result->fetchAssoc()) {
+    $Naam = "";
+    $foto = "";
+    if (isset($line["VOORNAAM"]))
+       $Naam .= $line["VOORNAAM"];
+    if (isset($line["VOORVOEG"])) {
+       if (($Naam <>"") and ($line["VOORVOEG"] <>"")) $Naam .= " ";
+       $Naam .= $line["VOORVOEG"];
+       }
+    if (isset($line["ACHTERNAAM"])) {
+       if ($Naam <> "") $Naam .= " ";
+       $Naam .= $line["ACHTERNAAM"];
+       }
+        $Foto1 = "/drupal/pics/leden/" .$Naam . ".jpg";
+	if (isset($line["VOORNAAM"]))
+		$helenaam = $line["VOORNAAM"];
+	else
+		$helenaam = "";
+	if (isset($line["VOORVOEG"]))
+		$helenaam .= " " .$line["VOORVOEG"];
+	$helenaam .= " " .$line["ACHTERNAAM"];
+	$adres = $line["ADRES"];
+	$postcode = $line["POSTCODE"];
+	$plaats = $line["PLAATS"];
+	$telefoon = $line["TELEFOON"] .'<br>' .$line["MOBIEL"];
+	$land = $line["LAND"];
+	$email = '<a href="mailto:' .$line["E_Mail"] .= '">' .$line["E_Mail"] ."</a>";
+	$code = $line["CODE"];
+    if (file_exists($Foto1)) {
+      $foto = '<img src="';
+	  $foto .= $Foto1;
+	  $foto .= '" width="60">';
+    } //if
+	else {
+		$Foto1 = "/drupal/pics/leden/" .$Naam . ".JPG";
+		if (file_exists($Foto1)) {
+      		$foto  = '<img src="';
+	  		$foto .= $Foto1;
+	  		$foto .= '" width="60">';
+      	        } //if
+      	        else {
+               } //else
+	} //else
+    $row[] = array(
+         $helenaam,
+         $adres .'<br>' .$postcode .'  ' .$plaats .'<br>' .$land,
+	     $telefoon,
+	     $email,
+	     $code,
+	     $foto);
+	}
+// return theme('table', $header, $row, $attributes);
+
+  $build = array(
+    'content' => array(
+      '#theme' => 'table',
+      '#rows' => $row,
+      '#header' => $header,
+      '#attributes' => $attributes,
+      '#empty' => 't(Geen gegevens beschikbaar)'
+      ),
+    );
+  return $build;
+}
+
+/**
+* Defines the etiketten selectie form.
+*/
+function ezaclid_etiket_form($form, &$form_state) {
+$form['selectie'] = array(
+  '#title' => t('Etiketten voor'),
+  '#type' => 'radios',           // select is misschien mooier !
+  '#default value' => 'clubblad',
+  '#options' => array(
+              'clubblad' => 'Clubblad',
+              'vergadering' => 'Ledenvergadering',
+              'receptie' => 'Receptie',
+              'VL' => 'Vliegende leden',
+              'camping' => 'Camping',
+              'alles'=> 'Alle leden'
+              ),
+  '#description' => t('Selecteer de doelgroep')
+  );
+$form['sortering'] = array(
+  '#title' => t('Sortering'),
+  '#type' => 'radios',
+  '#default value' => 'adres',
+  '#options' => array(
+              'adres' => 'op Adres',
+              'naam'  => 'op Naam'
+              ),
+  '#description' => t('Kies de sortering')
+  );
+
+$form['submit'] = array(
+  '#type'  => 'submit',
+  '#value' => t('Download etikettenbestand')
+);
+return $form;
+}
+
+/**
+* Validate the form.
+*/
+//function ezaclid_etiket_form_validate($form_id, $form_values) {
+
+//$Voornaam = $form_values['Voornaam'];
+//$Achternaam = $form_values['Achternaam'];
+
+//Geen * maar % als wildcard gebruiken
+//if ($Achternaam == '*') {
+   // We notify the form API that this field has failed validation.
+//   form_set_error(t('Use % for wildcard instead of *'));
+//   }
+
+//}
+
+/**
+* Handle post-validation form submission.
+*/
+function ezaclid_etiket_form_submit($form, &$form_state) {
+  $selectie  = $form_state['values']['selectie'];
+  $sortering = $form_state['values']['sortering'];
+  $form_state['redirect'] = 'ledenlijst/etiket/produce/' .$selectie .'/' .$sortering;
+}
+
+/**
+* redirected from ezaclid_etiket_form_submit
+*/
+function ezaclid_etiket_produce($selectie = 'clubblad', $sortering = 'adres') {
+  $CRLF = "\r\n";
+  $CR   = "\r";
+
+  //Algemene query voor output file
+  $query1  = 'SELECT Voornaam, Voorvoeg, Achternaam, Adres, Postcode, ';
+  $query1 .= 'Plaats, Land, Telefoon, Code, E_mail, Geboorteda ';
+  $query1 .= 'FROM {ezac_Leden} ';
+
+  //Volgorde zoals aangevraagd
+  switch ($sortering) {
+      case "adres":
+	  $query3 = ' ORDER by Land, Postcode, Achternaam, Voornaam';
+	  break;
+      case "naam":
+	  $query3 = ' ORDER by Achternaam, Land, Postcode, Voornaam';
+	  break;
+      } //switch
+
+  /* subject */
+  $subject = "EZAC etiketten - ";
+  $message = "";
+
+  switch ($selectie) {
+      case 'clubblad':
+		  $query2  = 'WHERE Actief AND Etiketje';
+		  $subject .= 'Clubblad';
+		  break;
+      case 'vergadering':
+		  $query2  = "WHERE Actief AND (";
+		  $query2 .= "CODE = 'VL' OR ";
+		  $query2 .= "CODE = 'AL')";
+		  $subject .= "ledenvergadering";
+		  break;
+      case 'receptie':
+		  $query2  = "WHERE Actief AND (";
+		  $query2 .= "CODE = 'AL' OR ";
+		  $query2 .= "CODE = 'VL' OR ";
+		  $query2 .= "CODE = 'AVL' OR ";
+		  $query2 .= "CODE = 'DO' OR ";
+		  $query2 .= "CODE = 'DB')";
+		  $subject .= "receptie";
+		  break;
+      case 'alles':
+		  $query2  = "Where Actief AND CODE <> 'BF'";
+		  $subject .= "alle leden";
+		  break;
+      case 'baby':
+		  $query2  = "WHERE Actief AND Babyvriend";
+		  $subject .= "Vrienden van Nico Baby";
+		  break;
+      case 'VL':
+		  $query2  = "WHERE Actief AND ";
+		  $query2 .= "CODE = 'VL' OR ";
+		  $query2 .= "CODE = 'AVL'";
+		  $subject .= "Vliegende Leden";
+		  break;
+      case 'camping':
+		  $query2  = "WHERE Actief AND Camping";
+		  $subject .= "Camping gebruikers";
+		  break;
+      // nog default constructie maken
+  } //switch
+
+  // data header for CSV attachment
+  $mess  = ('"Naam";"Adres";"Postcode";"Plaats";"Land";"Telefoon";"E-mail";"Code";"Geboorteda"' .$CRLF);
+  $mess .= ('"EZAC leden";"' .$selectie .'";"";"' .date("Y-m-d", mktime()) .'";"";"";"";""' .$CRLF);
+
+  //execute query
+  //echo $query1 .$query2 .$query3;
+  $result = db_query ($query1 .$query2 .$query3)
+    or die ("Query failed :" .$query1 .$query2 .$query3);
+
+  //$print .= "<p>Aantal adressen: " .db_affected_rows() ."</p>";
+
+  //output result
+  while ($line = $result->fetchAssoc()) {
+    $Naam = "";
+    if (isset($line["Voornaam"]))   $Naam .= $line["Voornaam"];
+    if (isset($line["Voorvoeg"])) {
+      if ($Naam <>"") $Naam .= " ";
+      $Naam .= $line["Voorvoeg"]; }
+    if (isset($line["Achternaam"])) {
+      if ($Naam <> "") $Naam .= " ";
+      $Naam .= $line["Achternaam"]; }
+    $mess .= ('"' .$Naam .'";');
+    $mess .= ('"' .$line["Adres"] .'";');
+    $mess .= ('"' .$line["Postcode"] .'";"' .$line["Plaats"] .'";');
+    if (isset($line["Land"])) $mess .= ('"' .$line["Land"] .'";');
+    else $mess .= ('"";');
+    if (isset($line["Telefoon"])) $mess .= ('"' .$line["Telefoon"] .'";');
+    else $mess .= ('"";');
+    if (isset($line["E_mail"])) $mess .= ('"' .$line["E_mail"] .'";');
+    else $mess .= ('"";');
+    if (isset($line["Code"])) $mess .= ('"' .$line["Code"] .'";');
+    else $mess .= ('"";');
+    if (isset($line["Geboorteda"])) $mess .= ('"' .$line["Geboorteda"] .'"');
+    else $mess .= ('""');
+    $mess .= $CRLF;
+  } //while
+
+  // output file to user
+  drupal_add_http_header('Content-Type', 'text/plain; charset=utf-8');
+  drupal_add_http_header('Content-Disposition', 'attachment; filename="' .$subject .'"'); // was $filenaam
+  print $mess;
+
+  return; //output
+} //ezaclid_etiket_produce
+
+/**
+* Defines the e-mail selectie form.
+*/
+function ezaclid_email_form($form, &$form_state) {
+$form['selectie'] = array(
+  '#title' => t('E-mail adressen voor'),
+  '#type' => 'radios',                      // select is misschien mooier !
+  '#default value' => 'clubblad',
+  '#options' => array(
+              'clubblad' => 'Clubblad',
+              'vergadering' => 'Ledenvergadering',
+              'receptie' => 'Receptie',
+              'VL' => 'Vliegende leden',
+              'instructeurs' => 'Instructie',
+              'camping' => 'Camping',
+              'alles' => 'Alle leden'
+              ),
+  '#description' => t('Selecteer de doelgroep')
+  );
+$form['opmaak'] = array(
+  '#title' => t('Opmaak adreslijst'),
+  '#type' => 'radios',
+  '#default value' => 'outlook',
+  '#options' => array(
+              'outlook' => 'Outlook (met ;)',
+              'gmail'  =>  'Gmail (met ,)'
+              ),
+  '#description' => t('Kies de opmaak')
+);
+$form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('Maak e-mail adressen')
+  );
+
+return $form;
+}
+
+/**
+* Validate the form.
+*/
+//function ezaclid_email_form_validate($form_id, $form_values) {
+//$selectie = $form_values['selectie'];
+
+//if ($Achternaam == '*') {
+   // We notify the form API that this field has failed validation.
+//   form_set_error(t('Use % for wildcard instead of *'));
+//   }
+//}
+
+/**
+* Handle post-validation form submission.
+*/
+function ezaclid_email_form_submit($form, &$form_state) {
+  $selectie  = $form_state['values']['selectie'];
+  $opmaak = $form_state['values']['opmaak'];
+  //drupal_set_message('email selectie submit [' .$selectie .']');
+  $form_state['redirect'] = 'ledenlijst/email/produce/' .$selectie .'/' .$opmaak;
+//  return 'ledenlijst/email/produce/' .$selectie;
+} // ezaclid_email_form_submit
+
+function ezaclid_email_produce ($selectie = 'VL', $opmaak = 'outlook') {
+//global $user;
+//$Owner = $user->name;
+  $CRLF = "\r\n";
+//Algemene query voor output file
+$query1  = 'SELECT Voornaam, Voorvoeg, Achternaam, Adres, Postcode, ';
+$query1 .= 'Plaats, Land, Telefoon, Code, E_mail ';
+$query1 .= 'FROM {ezac_Leden} ';
+
+/* subject */
+$subject = "EZAC ledenbestand voor e-mail - selectie voor ";
+$message = "";
+
+switch ($selectie) {
+    case "clubblad":
+		$query2  = "WHERE Actief AND Etiketje";
+		$subject .= "Clubblad";
+		break;
+    case "vergadering":
+		$query2  = "WHERE Actief AND (";
+		$query2 .= "CODE = 'VL' OR ";
+		$query2 .= "CODE = 'AL')";
+		$subject .= "ledenvergadering";
+    	break;
+    case "receptie":
+		$query2  = "WHERE Actief AND (";
+		$query2 .= "CODE = 'AL' OR ";
+		$query2 .= "CODE = 'VL' OR ";
+		$query2 .= "CODE = 'AVL' OR ";
+		$query2 .= "CODE = 'DO' OR ";
+		$query2 .= "CODE = 'DB')";
+		$subject .= "receptie";
+    	        break;
+    case "alles":
+		$query2  = "Where Actief AND CODE <> 'BF'";
+		$subject .= "alle leden";
+		break;
+    case "baby":
+		$query2  = "WHERE Actief AND Babyvriend";
+		$subject .= "Vrienden van Nico Baby";
+    	        break;
+    case "VL":
+		$query2  = "WHERE Actief AND ";
+		$query2 .= "CODE = 'VL'";
+		$subject .= "Vliegende Leden";
+    	        break;
+   case "camping":
+		$query2  = "WHERE Actief AND Camping";
+		$subject .= "Camping gebruikers";
+		break;
+   case "instructeurs":
+                $query2 = "WHERE Actief AND Instructie";
+	        $subject .= "Instructeurs";
+                break;
+   // nog een otherwise constructie invoegen
+} //switch
+
+$query3 = " AND E_mail IS NOT NULL ORDER by Achternaam, Land, Postcode";
+
+switch ($opmaak) {
+	case "outlook":
+		$sep = '; ';
+		break;
+	case "gmail":
+		$sep = ', ';
+		break;
+} // switch
+
+//execute query
+//echo $query1 .$query2 .$query3;
+$result = db_query ($query1 .$query2 .$query3)
+  or die ("Query failed :" .$query1 .$query2 .$query3);
+
+$print = "<p><h2>";
+$print .= $subject;
+$print .= "</h2><br />";
+$print .= "</p>";
+
+//$print .= "<p>Aantal adressen: " .db_affected_rows() ."</p>";
+
+$mess = "";
+
+//output result
+while ($line = $result->fetchAssoc()) {
+  $mess .= ($line["E_mail"] .$sep);
+} //while
+  $mess .= $CRLF;
+
+// MAAK EEN DRUPAL FORM ? of output met drupal_set_message
+/* and now show it */
+$print .= "<p>Dit zijn de geselecteerde adressen.<br>\n";
+$print .= "<p>Plak ze met copy/paste in het TO of BCC veld van je bericht<br>\n";
+$print .= "<br>\n";
+$print .= '<form name="form1" method="post" action="">';
+$print .= ' <textarea name="mailadres" cols="80" rows="10">';
+$print .= $mess;
+$print .= '</textarea>';
+$print .= '</form>';
+
+//einde mail adressenlijst
+
+// Hier zou ook een koppeling met de mail functie van Drupal kunnen komen
+
+return $print;
+} // ezaclid_email_produce

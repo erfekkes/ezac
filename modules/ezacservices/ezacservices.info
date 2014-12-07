@@ -1,0 +1,7 @@
+; $Id$
+name = EZAC services
+description = REST services
+version = "7.x-0.1"
+core = 7.x
+dependencies[] = services
+dependencies[] = rest_server

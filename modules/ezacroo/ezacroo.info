@@ -1,0 +1,5 @@
+; $Id$
+name = EZAC rooster
+description = Rooster met ruilfuncite
+version = "7.x-0.1"
+core = 7.x

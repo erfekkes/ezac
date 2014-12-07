@@ -1,0 +1,718 @@
+<?php
+// $Id$
+
+/***
+* EZAC leerling volgsysteem v7.x-1.0
+* 
+* Functie: administreren van vliegstandaard
+* 
+*/
+
+/**
+* Globals
+*/
+  global $base_url;
+  //DEFINE ('EZAC_ENDPOINT', "$base_url/api/");
+  //drupal_set_message(EZAC_ENDPOINT ." in gebruik"); //DEBUG
+  //DEFINE ('EZAC_ENDPOINT', 'http://www.ezac.nl/drupal/api/'); //production host
+
+  //DEFINE ('DETAILS', true); //for ezaclvs_display
+  //DEFINE ('TOTALS', false);
+
+/* TODO
+Notice: Constant EZAC_ENDPOINT already defined in include_once() (line 19 of /Users/evert/Library/Containers/com.bitnami.drupal/Data/app-7_19/apps/drupal/htdocs/sites/all/modules/ezacstart/ezacstart.module).
+Notice: Constant DETAILS already defined in include_once() (line 23 of /Users/evert/Library/Containers/com.bitnami.drupal/Data/app-7_19/apps/drupal/htdocs/sites/all/modules/ezacstart/ezacstart.module).
+Notice: Constant TOTALS already defined in include_once() (line 24 of /Users/evert/Library/Containers/com.bitnami.drupal/Data/app-7_19/apps/drupal/htdocs/sites/all/modules/ezacstart/ezacstart.module).
+*/
+
+
+  global $datum_default;
+  global $maand_default;
+  global $jaar_default;
+  global $download;
+  
+  $datum_default = ($datum_default == '') ? date('Y-m-d') : $datum_default;
+  $maand_default = ($maand_default == '') ? date('Y-m') : $maand_default;
+  $jaar_default  = ($jaar_default == '') ? date('Y') : $jaar_default;
+
+/**
+* Implementation of hook_permission().
+*/
+function ezaclvs_permission() {
+  return array(
+    'ezac_lvs_view' => array(
+      'title' => t('EZAC LVS inzage'),
+      'description' => t('Bekijken EZAC leerling volgsysteem.'),
+    ),
+    'ezac_lvs_edit' => array(
+      'title' => t('EZAC LVS wijzigen'),
+      'description' => t('Wijzigen EZAC leerling volgsysteem.'),
+    ),
+  );
+}
+
+/**
+* Implementation of hook_menu().
+*/
+function ezaclvs_menu() {
+  //prepare dates for menu items
+  $dag = date('Y-m-d');
+  $maand = date('Y-m');
+  $jaar = date('Y');
+  //build menu
+  $items = array();
+    $items['lvs'] = array(
+      'title' => 'EZAC verslag',
+      'description'=> 'Aanmaken dagverslag',
+      'page callback' => '_ezaclvs_verslag',
+      'page arguments' => '', //array(2),  // datum
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_view'),
+      'type' => MENU_NORMAL_ITEM
+    ); 
+  $items['lvs/verslag'] = array(
+      'title' => 'Verslag',
+      'description'=> 'Aanmaken dagverslag',
+      'page callback' => '_ezaclvs_verslag',
+      'page arguments' => '', //array($dag, '0'), //vandaag
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_view'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => 0, 
+    );
+  $items['lvs/persoon'] = array( //nieuw toegevoegd
+      'title' => 'Verslag persoon',
+      'description'=> 'Verslag persoon',
+      'page callback' => '_ezaclvs_persoon',
+      'page arguments' => '', //array($dag, '1'), //datum for current user
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 1,
+    );
+  $items['lvs/bevoegdheid'] = array(
+      'title' => 'Bevoegdheden',
+      'description'=> 'Wijzigen bevoegdheden',
+      'page callback' => '_ezaclvs_bevoegdheid',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 2,
+    );
+  $items['lvs/versturen'] = array(
+      'title' => 'Verstuur verslag',
+      'description'=> 'Versturen verslag',
+      'page callback' => '_ezaclvs_versturen',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 3,
+    );
+  $items['lvs/download'] = array(
+      'title' => 'Download',
+      'description'=> 'Download a report',
+      'page callback' => '_ezaclvs_download',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_view'),
+      'type' => MENU_CALLBACK,
+    );
+
+  return $items;
+}
+
+/**
+ * Helper function to show datum
+ * @param $datum date for expansion
+ */
+function ezaclvs_show_date($datum) {
+  //handle datum range
+  if (strpos($datum, ':')) { //date range given
+    $date_range = explode(':', $datum);
+    $dat_string = ezaclvs_show_date($date_range[0]) .' - ' .ezaclvs_show_date($date_range[1]);
+    return $dat_string;
+  }
+  $datumvalue = strtotime($datum);
+  $dat_string = '';
+  if (strlen($datum) > 7) {
+    $dat_string .= t(date('l', $datumvalue)); // dag van de week
+    $dat_string .= " " .t(date('j', $datumvalue)) ." "; // dag zonder nul
+  }
+  if (strlen($datum) > 4) {
+    $dat_string .= t(date('F', $datumvalue)) . " "; // maand volledig
+  }
+  $dat_string .= " " .t(date('Y', $datumvalue)); // jaar
+  return $dat_string;
+}
+
+/**
+ * helper function to find afkorting for current user
+ * @returns string $afkorting
+ */
+function ezaclvs_get_afkorting() {
+  // find ezac_Leden Afkorting for logged-in user
+  global $user;
+  global $user_afkorting;
+  
+  $name = $user->name;
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('afkorting'));
+  $query->condition('l.User', $name, '=');
+  $afkorting = $query->execute()->fetchField();
+  $user_afkorting = $afkorting; // store for later use
+  return $afkorting;
+}
+
+/**
+ * helper function for finding a name
+ * @param string $name afkorting to be found
+ * @returns string naam when found else $name from input
+ */
+function ezaclvs_find_name($afkorting) {
+  if ($afkorting == '') return '';
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('voornaam', 'voorvoeg', 'achternaam'));
+  $query->condition('l.afkorting', $afkorting, '=');
+  $helenaam = $query->execute()->fetchassoc();
+  if (isset($helenaam)) {
+    $naam = $helenaam['voornaam'];
+    if (isset($helenaam['voorvoeg'])) $naam .= ' ' .$helenaam['voorvoeg'] ;
+    $naam .= ' ' .$helenaam['achternaam'];
+  }
+  if ($helenaam == '') {
+    $naam = $afkorting;
+  }
+  return $naam;
+}
+
+/**
+ * Lees VL namen in tabel
+ */
+function ezaclvs_get_namen() {
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'));
+  $query->condition('l.code', 'VL', '=');
+  $query->condition('l.actief', '1', '=');
+  $query->orderBy('l.voornaam', 'ASC');
+  $query->orderBy('l.achternaam', 'ASC');
+  $namen = $query->execute()->fetchAll();
+  
+  foreach ($namen as $naam) {
+    $naam_tabel[$naam->afkorting] = sprintf("%s %s %s", $naam->voornaam, $naam->voorvoeg, $naam->achternaam);
+  }
+  return $naam_tabel;
+}
+
+/**
+ * Lees bevoegdheden in tabel
+ */
+function ezaclvs_get_bevoegdheden() {
+  $query = db_select('ezac_LVS_Bevoegdheden', 'b');
+  $query->fields('b',array('id', 'bevoegdheid', 'naam'));
+  $bevoegdheden = $query->execute()->fetchAll();
+  
+  foreach ($bevoegdheden as $bevoegdheid) {
+    $bevoegdheden[$bevoegdheid->id] = array(
+        $bevoegdheid->id,
+        $bevoegdheid->naam,
+    );
+  }
+  return $bevoegdheden;
+}
+
+
+/**
+ * Lees Kisten in tabel
+ */
+function ezaclvs_get_kisten() {
+  $query = db_select('ezac_Kisten', 'k');
+  $query->fields('k',array('registratie', 'inzittenden', 'prive'));
+  $query->condition('k.actief', '1', '=');
+  $query->orderBy('k.prive', 'ASC');
+  $query->orderBy('k.registratie', 'ASC');
+  $kisten = $query->execute()->fetchAll();
+  
+  foreach ($kisten as $kist) {
+    $kist_tabel[$kist->registratie] = $kist->inzittenden;
+  }
+  return $kist_tabel;
+}
+
+/**
+ * Create verslag record
+ */
+function _ezaclvs_verslag() {
+  return drupal_get_form('ezaclvs_verslag_form'); //null record param means create new one
+}
+
+/**
+ *Edit verslag record
+ *@param $id id of verslag record
+ */
+function _ezaclvs_edit($id) {
+    global $bevoegdheden;
+    //global $namen;
+    $starts = ezaclvs_get_starts($id, null, null);
+    $bevoegdheden = ezaclvs_get_bevoegdheden();
+    //$namen = ezavlvs_get_namen();
+  // $starts = result array with one record, select [0] for singleton
+  //variable_set('start_record', $starts[0]);
+  return drupal_get_form('ezaclvs_form', $starts[0]);
+}
+
+/**
+* Build dagrapport form.
+* @param $start - starts data record (optional)
+*/
+function ezaclvs_verslag_form($form = NULL, &$form_state) {
+  // build form for verslag edit
+    global $jaar_default;
+    global $datum_default;
+    global $namen;
+    global $user;
+  
+    $query =  db_select('ezac_leden', 'l');
+    $query->fields('l', array('afkorting', 'user'));
+    $query->condition('l.user', $user->name, '=');
+    $afkorting = $query->execute()->fetchCol();
+                         
+  $namen = ezaclvs_get_namen();
+  //$namen[''] = '<leeg>';
+  //$namen['Onbekend'] = '<Onbekend>';
+  
+    // find this year's flight days, descending
+    $query = db_select('ezac_starts', 's');
+    $query->fields('s',array('datum'));
+    $query->condition('s.datum', $jaar_default .'-01-01', '>'); 
+    $query->distinct(); //unique values
+    $query->orderBy('s.datum', 'DESC');
+    $starts = $query->execute()->fetchAll();
+    foreach ($starts as $start) {
+        $start_dates[$start->datum] = ezaclvs_show_date($start->datum); //list of dates for selection
+    }
+    $datum = key($start_dates); // most recent date value
+    
+  if (!isset($verslag) || $verslag == null) {
+    //new record
+    $new = TRUE;
+    //fill default values
+    $verslag['id'] = 0;  
+    $verslag['datum'] = reset($start_dates);
+    $verslag['instructeur'] = ''; //@TODO use id of current user
+    $verslag['weer'] = '';
+    $verslag['verslag'] = '';
+  }
+  else $new = FALSE;
+
+  $form['titel']['#type'] = 'markup';
+  $form['titel']['#markup'] = ($new) 
+      ? '<p><h2>Aanmaken dagverslag</h2></p>' 
+      : '<p><h2>Wijzigen dagverslag</h2></p>';
+  $form['titel']['#weight'] = 0;
+  
+  $form['new'] = array(
+    '#title' => 'new',
+    '#type' => 'hidden',
+    '#value' => $new,
+  );
+  $form['id'] = array(
+      '#title' => t('id'),
+      '#type' => 'hidden',
+      '#default_value' => $verslag['id'],
+      '#description' => t('verslag id nummer'),
+  );
+    
+    // make most recent day active
+    // present as default date in drop list
+  $form['datum'] = array(
+    '#title' => t('Datum'),
+    //'#type' => 'date_popup', //extension to 'date'
+    //'#date_format' => 'Y-m-d',
+    //'#default_value' => $start['datum'],
+    '#type' => 'select',
+    '#options' => $start_dates,
+    '#default_value' => $datum,  //most recent date
+    '#description' => t('Datum'),
+    '#weight' => 1,
+    '#ajax' => array(
+        'callback' => 'ezaclvs_verslag_callback', 
+        'wrapper' => 'vliegers-div',
+        'effect' => 'fade',
+        'progress' => array('type' => 'none'),
+    ), 
+  );
+    
+    // @TODO present tick box for alternative date with ajax date entry field
+
+    // set instructeur default to value of current user
+    // present drop list with leden
+    $afkorting = ezaclvs_get_afkorting();
+    
+  $form['instructeur'] = array(
+    '#title' => t('Instructeur / verantwoordelijke'),
+    '#type' => 'select',
+    '#options' => $namen,  //@TODO select only instructeur from namen
+    '#default_value' => $afkorting,
+    '#description' => t('Instructeur of verantwoordelijke'),
+    '#weight' => 2,
+  );
+    
+    // textaera field for 'weer' (2 lines)
+  $form['weer'] = array(
+    '#title' => t('Weer'),
+    '#type' => 'textarea',
+    '#rows' => 2,
+    //'#default_value' => $verslag_waarde,
+    '#weight' => 3,
+    '#prefix' => '<div id="weer">',
+    '#suffix' => '</div>',
+  );
+    // textarea field for 'verslag'  (10 lines)
+  $form['verslag'] = array(
+    '#title' => t('Verslag'),
+    '#type' => 'textarea',
+    '#rows' => 10,
+    //'#default_value' => $verslag,
+    '#required' => TRUE,  
+    '#weight' => 4,
+    '#prefix' => '<div id="verslag">',
+    '#suffix' => '</div>',
+  );
+    
+    
+/**
+* Dynamic build vliegers section here
+**/
+    // generate form element with vliegers for the day
+    // get starts->gezagvoerder, starts->tweede in $namen
+    $datum_form = !empty($form_state['values']['datum']) 
+                   ? $form_state['values']['datum'] 
+                   : $datum;
+    $query = db_select('ezac_starts', 's');
+    $query->fields('s',array('gezagvoerder', 'tweede'));
+    $query->condition('s.datum', $datum_form, '='); 
+    $starts = $query->execute()->fetchAll();
+
+    $vliegers = array(); 
+    foreach ($starts as $start) {
+        // @TODO filter for instructie starts (disregard gezagvoerder - instructeur)
+        $gezagvoerder = $start->gezagvoerder; // of ->gezagvoerder ?
+        if (!isset($vliegers[$gezagvoerder])) 
+            $vliegers[$gezagvoerder] = $namen[$gezagvoerder];
+        if (isset($start->tweede) && ($start->tweede <>'')) {
+            $tweede = $start->tweede;
+            if (!isset($vliegers[$tweede])) 
+                $vliegers[$tweede] = $namen[$tweede];
+        }
+    }
+
+    //[vliegers] form wordt door AJAX opnieuw opgebouwd
+    $form['vliegers'] = array(
+    '#title' => t('Opmerkingen per vlieger'),
+    '#type' => 'container',
+    '#weight' => 5,
+    '#prefix' => '<div id="vliegers-div">', //This section replaced by AJAX callback
+    '#suffix' => '</div>',
+    //'#collabsible' => TRUE,
+    //'#collapsed' => FALSE,
+    '#tree' => TRUE,
+    );
+    
+    
+    //Toon eerdere verslagen per lid
+    foreach ($vliegers as $afkorting => $helenaam) {
+        // query lvs verslag, bevoegdheid records
+        // @TODO NOG UIT TE WERKEN
+        $query = db_select('ezac_lvs_dagverslagen_lid', 'l');
+        $query->fields('l', array('id', 'afkorting', 'instructeur', 'datum', 'verslag'));
+        $query->condition('afkorting', $afkorting, '=');
+        $verslagen = $query->execute()->fetchAll();
+        //dpm($verslagen, 'verslagen'); //debug
+        // put in table
+    
+        if (!empty($verslagen)) { //create fieldset
+            $form['vliegers']['verslagen'][$afkorting] = array(
+                '#title' => t("Eerdere verslagen voor $helenaam"),
+                '#type'=> 'fieldset',
+                '#edit' => FALSE,
+                '#required' => FALSE,
+                '#collapsible' => TRUE,
+                '#collapsed' => TRUE,
+                '#weight' => 5,
+                '#tree' => TRUE,
+                );
+            }
+
+        foreach ($verslagen as $verslag) {
+            //show as markup in form or textfield with edit=false
+            $form['vliegers']['verslagen'][$afkorting][$verslag->id] = array(
+                '#title' => $verslag->datum,
+                '#markup' => '<p>Datum: ' .$verslag->datum .' - '
+                .'Instructeur: ' .$namen[$verslag->instructeur] 
+                .'<br>' .$verslag->verslag 
+                .'</p>',
+                '#tree' => TRUE,
+                '#weight' => 5,
+            );
+        }    
+    }
+    
+    //  list with persons who flown that day - each may be selected
+    //   enter persoon_verslag 
+    //   possible entry of 'bevoegdheid' as of datum 
+    
+    // @TODO SORT $vliegers
+    foreach ($vliegers as $afkorting => $helenaam) {
+
+    // invoeren opmerking
+    $form['vliegers']['opmerking'][$afkorting] = array(
+        '#title' => t("Opmerkingen voor $helenaam"),
+        '#type' => 'textarea',
+        '#rows' => 3,
+        //'#default_value' => $verslag,
+        '#required' => FALSE,  
+        '#weight' => 6,
+        '#tree' => TRUE,
+    );
+    // invoeren bevoegdheid - nested container with verslag / bevoegdheid?
+    // alternative is a button jumping to add bevoegdheid form
+        //$form['vliegers'][$naam]['bevoegdheid'] = array();
+        // @TODO select from drop list with known bevoegdheid values
+    }
+ 
+    
+/**
+* end of dynamic build vliegers section
+**/
+    
+    //submit
+    $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Opslaan'),
+    '#weight' => 13,
+    );
+
+  return $form;
+}
+
+/**
+ * Selects the piece of the form we want to use as replacement text and returns
+ * it as a form (renderable array).
+ *
+ * @return renderable array (the textfields element)
+ */
+function ezaclvs_verslag_callback($form, $form_state) {
+    return $form['vliegers']; //HTML for verslag form['vliegers']
+    //return $form;
+}
+
+
+/**
+* Validate the form.
+*/
+function ezaclvs_verslag_form_validate($form, &$form_state) {
+  if (!isset($form_state['values'])) return;
+
+    //dpm($form, 'form validate'); //debug
+    //dpm($form_state,'form_state validate'); //debug
+    
+  //datum
+  $dc = explode('-', $form_state['values']['datum']);
+  if (!checkdate($dc[1], $dc[2], $dc[0])) form_set_error('datum', 'ongeldige datum');
+
+  
+  //confirm delete bij op == Verwijderen
+  if (isset($form_state['values']['op'])) {
+    if (($form_state['values']['op'] == 'Verwijderen') && ($form_state['values']['verwijderen'] == 0)) {
+      form_set_error('verwijderen', 'Selecteer Verwijderen én druk op de knop Verwijderen om deze vlucht te ...');
+      return;
+    }
+  }
+}
+
+/**
+* Handle post-validation form submission.
+*/
+function ezaclvs_verslag_form_submit($form, &$form_state) {
+  global $namen;
+  global $current_url;
+  
+    $new = $form_state['values']['new'];
+    $id = $form_state['values']['id'];
+    $datum = $form_state['values']['datum'];
+    $instructeur = $form_state['values']['instructeur'];
+    $weer = $form_state['values']['weer'];
+    $verslag = $form_state['values']['verslag'];
+    $op = $form_state['values']['op'];
+
+    
+    //write verslag to ezac_LVS_verslag
+    if ($form_state['values']['weer'].$form_state['values']['verslag'] <> '') {
+        $id = db_insert('ezac_LVS_Dagverslagen')
+        ->fields(array(
+            'datum' => $form_state['values']['datum'],
+            'instructeur' => $form_state['values']['instructeur'],
+            'weer' => $form_state['values']['weer'],
+            'verslag' => $form_state['values']['verslag'],
+        ))
+        ->execute();
+        drupal_set_message('Dagverslag voor ' .$form_state['values']['datum'] .' aangemaakt', 'status');
+    }
+    //write verslag per vlieger
+    foreach ($form_state['values']['vliegers']['opmerking'] as $afkorting => $verslag) {
+        if ($verslag <> '') {
+        $id = db_insert('ezac_LVS_dagverslagen_lid')
+            ->fields(array(
+                'datum' => $form_state['values']['datum'],
+                'afkorting' => $afkorting,
+                'instructeur' => $form_state['values']['instructeur'],
+                'verslag' => $verslag,
+            ))
+            ->execute();
+            //drupal_set_message('Verslag voor ' .$namen[$afkorting] .' aangemaakt', 'status');
+        }
+    }
+    
+  // return result
+    /*
+  $message = ($new) ? 'Verslag is aangemaakt' : 'Verslag is bijgewerkt' ;
+  if ($op == 'Verwijderen') $message = "Verslag $id op datum $datum is verwijderd";
+  drupal_set_message($message);
+  */
+  
+  //redirect naar calling url
+  if ($current_url != "") {
+    $form_state['redirect'] = $current_url;
+  }
+  else $form_state['redirect'] = 'lvs';
+  return;
+}
+
+
+/**
+ * Consume web service for starts
+ * @param int $id (optional) id of specific start record
+ * @param string $datum date range YYYY[-MM[-DD]]
+ * @param string $naam (optional) value for Gezagvoerder of Tweede
+ * @returns struct array of start records
+ * uses EZAC web service api/starts
+ **/
+function ezaclvs_get_starts($id, $datum, $naam) {
+// build REST resource request
+  $resource = EZAC_ENDPOINT .'starts/';
+   if (isset($id)) {
+    $resource .= $id .'.json';
+  }
+  else {
+    $resource .= '*.json';
+  }
+  // GET resource data
+  $options['headers'] = array(
+    'Content-Type' => 'application/json',
+    'charset' => 'UTF-8',
+    'Connection' => 'Keep-Alive',
+    'Cache-control' => 'no-cache',
+    'Pragma' => 'no-cache', //http 1.0
+    );
+  $options['method'] = 'GET';
+ 
+  // Replace code for oAuthRequest
+  $params = array();
+  $params['datum'] = $datum;
+  if (isset($naam)) $params['naam'] = $naam;
+  $result = oAuthRequest($resource, 'GET', $params);
+  return drupal_json_decode($result);
+}
+
+/**
+ * Consume web service for starts
+ * @param string $datum date range YYYY[-MM[-DD]]
+ * @param string $naam (optional) value for Gezagvoerder of Tweede
+ * @returns array of start records
+ * uses EZAC web service api/starts
+ **/
+function ezaclvs_get_starts_index($datum, $naam) {
+// build REST resource request
+  $resource = EZAC_ENDPOINT .'starts.json';
+  // Replace code for oAuthRequest
+  $params = array();
+  $params['datum'] = $datum;
+  if (isset($naam)) $params['naam'] = $naam;
+  $result = oAuthRequest($resource, 'GET', $params);
+  return drupal_json_decode($result);  
+}
+
+/**
+ * oAuth example code (adapted)
+ * @param string $req_url api endpoint url
+ * @param string $req_method POST, PUT, DELETE
+ * @param array $params parameters for request
+ */
+function ezaclvs_oAuthRequest($req_url, $req_method, $params) {
+// @see http://oauth.googlecode.com/svn/code/php/OAuth.php
+  global $base_url;
+  //require 'OAuth.php';
+  // Establish an OAuth consumer based on consumer key and secret
+    //@TODO Move key and secret in configuration file
+  $key ='3kvcCaWzSVmLm2jUWGDHBpJuxdPSpWdU'; // for user start on ezac.nl
+  $secret = 'e9d4zECM7P6nasogX4gryhDyT2uRZ8Vs';
+  $consumer = new OAuthConsumer($key, $secret, NULL); 
+  // Setup OAuth request
+  //$api_endpoint = 'https://www.mydrupalsite.com/my_endpoint/resource_name';
+  //$api_endpoint = "$base_url/api/starts.json";
+  $api_endpoint = $req_url;
+  //$params = array('param1' => 'value1');
+  $request = OAuthRequest::from_consumer_and_token($consumer, NULL, $req_method, $api_endpoint, $params);
+  // Sign the constructed OAuth request using HMAC-SHA1
+  $request->sign_request(new OAuthSignatureMethod_HMAC_SHA1(), $consumer, NULL);
+  // Make signed OAuth request to the API server
+  $output = array();
+  foreach($params as $key => $item) {
+    $output[] = $key . '=' . urlencode($item);
+  }
+  $url = $api_endpoint . '?' .  implode('&', $output);
+  $curl = curl_init();
+  $options = array(
+    CURLOPT_URL => $url,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FAILONERROR => false,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_HTTPHEADER => array(
+			  'Content-Type: application/json',
+			  $request->to_header()),
+  );
+  curl_setopt_array($curl, $options);
+  //switch http method
+  switch ($req_method) {
+    case 'GET':
+      curl_setopt($curl, CURLOPT_HTTPGET, true);
+      break;
+    case 'POST':
+      curl_setopt($curl, CURLOPT_POST, true);
+      //curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($params)); //passed url-encoded instead
+      break;
+    case 'PUT':
+      curl_setopt($curl, CURLOPT_PUT, true);
+      break;
+    case 'DELETE':
+      curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $req_method);
+      break;
+  }
+  $response = curl_exec($curl);
+  //dpm($req_url); //DEBUG
+  //dpm($req_method);
+  //dpm($params);
+  //dpm($response);
+  //insert error handling
+  if (!$response) {
+    //error
+    $err_txt = curl_error;
+    $err_no = curl_errno;
+    drupal_set_message("error $err_txt ($err_no) for $url", 'error');
+    return;
+  }
+  curl_close($curl);
+  return $response;
+}

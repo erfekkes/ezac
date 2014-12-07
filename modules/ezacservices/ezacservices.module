@@ -1,0 +1,1249 @@
+<?php
+// $Id$
+
+/***
+* EZAC services v7.x-1.0
+* Implementation of REST api services for EZAC.nl
+* 
+* ezac.nl/api/leden  - get
+* ezac.nl/api/kisten - get
+* ezac.nl/api/starts - get, post, put, delete
+***/
+
+/**
+* Implements hook_permission().
+*/
+function ezacservices_permission() {
+  return array(
+    'EZACservices leden retrieve' => array(
+      'title' => t('access leden/retrieve'),
+      'description' => t('REST api for reading ezac_Leden table.'),
+    ),
+    'EZACservices kisten retrieve' => array(
+      'title' => t('access kisten/retrieve'),
+      'description'=> t('REST api for reading ezac_Kisten table'),
+    ),
+    'EZACservices starts retrieve' => array(
+      'title' => t('access starts/retrieve'),
+      'description' => t('REST api for reading ezac_Starts table'),
+    ),
+    'EZACservices starts create' => array(
+      'title' => t('access starts/create'),
+      'description' => t('REST api for create in ezac_Starts table'),
+    ),
+    'EZACservices starts update' => array(
+      'title' => t('access starts/update'),
+      'description' => t('REST api for update in ezac_Starts table'),
+    ),
+    'EZACservices starts delete' => array(
+      'title' => t('access starts/delete'),
+      'description' => t('REST api for delete in ezac_Starts table'),
+    ),
+    'EZACservices starts index' => array(
+      'title' => t('access starts/index'),
+      'description' => t('REST api for index in ezac_Starts table'),
+    ),
+  );
+}
+
+/**
+* Implements hook_services_resources().
+*/
+function ezacservices_services_resources() {
+  $api = array(
+   'leden' => array(
+      'operations' => array(
+        'retrieve' => array( // GET
+          'help' => 'Retrieves leden records',
+          'callback' => '_ezacservices_leden_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //leden view
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'resource_id',
+              'type' => 'string',
+              'description' => 'resource id',
+              'source' => array('path' => '0'), //<id>|<afkorting> of record requested or <*>
+              'optional' => FALSE,
+              'default value' => '0',
+            ),
+            array(
+              'name' => 'code', //optional parameter <code>
+              'type' => 'string',
+              'description' => 'soort leden',
+              'source' => array('param' => 'code'),
+              'optional' => TRUE,
+              'default value' => 'VL',
+            ),
+            array(
+              'name' => 'actief', //optional parameter <actief>
+              'type' => 'int',
+              'description' => 'actieve leden',
+              'source' => array('param' => 'actief'),
+              'optional' => TRUE,
+              'default value' => '1',
+            ),
+          ),
+        ),
+      ),
+    ),
+   'kisten' => array(
+      'operations' => array(
+        'retrieve' => array( // GET
+          'help' => 'Retrieves kisten records',
+          'callback' => '_ezacservices_kisten_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //kisten view
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'registratie',
+              'type' => 'string',
+              'description' => 'registratie',
+              'source' => array('path' => '0'), // <registratie> or <*>
+              'optional' => FALSE,
+              'default value' => '0',
+            ),
+            array(
+              'name' => 'actief',
+              'type' => 'int',
+              'description' => 'actieve kisten',
+              'source' => array('param' => 'actief'),
+              'optional' => TRUE,
+              'default value' => '1',
+            ),
+          ),
+        ),
+      ),
+    ),
+   'starts' => array(
+      'operations' => array(
+        'create' => array( // POST
+          'help' => 'Creates starts records',
+          'callback' => '_ezacservices_starts_create',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //starts create
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'datum',
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => FALSE,
+            ),
+            array(
+                'name' => 'registratie',
+                'type' => 'string',
+                'description' => 'Registratie',
+                'source' => array('param' => 'registratie'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'gezagvoerder',
+                'type' => 'string',
+                'description' => 'Gezagvoerder',
+                'source' => array('param' => 'gezagvoerder'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'tweede',
+                'type' => 'string',
+                'description' => 'Tweede inzittende',
+                'source' => array('param' => 'tweede'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'soort',
+                'type' => 'string',
+                'description' => 'Soort start',
+                'source' => array('param' => 'soort'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'startmethode',
+                'type' => 'string',
+                'description' => 'Startmethode (L,S,M)',
+                'source' => array('param' => 'startmethode'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'start',
+                'type' => 'string',
+                'description' => 'start',
+                'source' => array('param' => 'start'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'landing',
+                'type' => 'string',
+                'description' => 'Landing',
+                'source' => array('param' => 'landing'),
+                'optional' => TRUE, //Vluchten zonder landing ook accepteren
+            ),
+            array(
+                'name' => 'duur',
+                'type' => 'string',
+                'description' => 'duur',
+                'source' => array('param' => 'duur'),
+                'optional' => TRUE, //Duur wordt door server berekend
+            ),
+            array(
+                'name' => 'instructie',
+                'type' => 'string',
+                'description' => 'instructie',
+                'source' => array('param' => 'instructie'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'opmerking',
+                'type' => 'string',
+                'description' => 'opmerking',
+                'source' => array('param' => 'opmerking'),
+                'optional' => TRUE,
+            ),
+          ),
+        ),
+        'update' => array(  // PUT
+          'help' => 'Updates starts records',
+          'callback' => '_ezacservices_starts_update',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //starts create
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'resource_id',
+              'type' => 'string',
+              'description' => 'resource id',
+              'source' => array('path' => '0'),
+              'optional' => FALSE,
+            ),
+           array(
+              'name' => 'datum',
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => FALSE,
+            ),
+            array(
+                'name' => 'registratie',
+                'type' => 'string',
+                'description' => 'Registratie',
+                'source' => array('param' => 'registratie'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'gezagvoerder',
+                'type' => 'string',
+                'description' => 'Gezagvoerder',
+                'source' => array('param' => 'gezagvoerder'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'tweede',
+                'type' => 'string',
+                'description' => 'Tweede inzittende',
+                'source' => array('param' => 'tweede'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'soort',
+                'type' => 'string',
+                'description' => 'Soort start',
+                'source' => array('param' => 'soort'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'startmethode',
+                'type' => 'string',
+                'description' => 'Startmethode (L,S,M)',
+                'source' => array('param' => 'startmethode'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'start',
+                'type' => 'string',
+                'description' => 'start',
+                'source' => array('param' => 'start'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'landing',
+                'type' => 'string',
+                'description' => 'Landing',
+                'source' => array('param' => 'landing'),
+                'optional' => TRUE,
+            ),
+            array(
+                'name' => 'duur',
+                'type' => 'string',
+                'description' => 'duur',
+                'source' => array('param' => 'duur'),
+                'optional' => TRUE,
+            ),
+            array(
+                'name' => 'instructie',
+                'type' => 'string',
+                'description' => 'instructie',
+                'source' => array('param' => 'instructie'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'opmerking',
+                'type' => 'string',
+                'description' => 'opmerking',
+                'source' => array('param' => 'opmerking'),
+                'optional' => TRUE,
+            ),
+          ),
+        ),
+        'retrieve' => array( // GET
+          'help' => 'Retrieves starts records',
+          'callback' => '_ezacservices_starts_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //starts view
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'resource_id', //Id value
+              'type' => 'string',
+              'description' => 'Id value',
+              'source' => array('path' => '0'),
+              'optional' => FALSE, 
+            ),
+            array(
+              'name' => 'datum',
+              'type' => 'string',
+              'description' => 'Datum value YYYY[-MM[-DD]]',
+              'source' => array('param' => 'datum'),
+              'optional' => TRUE,
+            ),
+            array(
+              'name' => 'naam',
+              'type' => 'string',
+              'description' => 'Gezagvoerder or Tweede value',
+              'source' => array('param' => 'naam'),
+              'optional' => TRUE,
+            ),
+            array(
+              'name' => 'registratie',
+              'type' => 'string',
+              'description' => 'Registratie value',
+              'source' => array('param' => 'registratie'),
+              'optional' => TRUE,
+            ),
+          ),
+        ),
+        'delete' => array( // DELETE
+          'help' => 'Deletes starts records',
+          'callback' => '_ezacservices_starts_delete',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //starts view
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'resource_id',
+              'type' => 'string',
+              'description' => 'Resource ID',
+              'source' => array('path' => '0'),
+              'optional' => FALSE,
+              'default value' => '0',
+            ),
+            array(
+              'name' => 'datum',
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => FALSE,
+            ),
+          ),
+        ),
+        'index' => array( // GET
+          'help' => 'Indexes starts records',
+          'callback' => '_ezacservices_starts_index',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'), //starts view
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'datum', //<yyyy[-mm[-dd]]
+              'type' => 'string',
+              'description' => 'Datum YYYY[-MM[-DD]]', //datum waarde[reeks]
+              'source' => array('param' => 'datum'),
+              'optional' => TRUE,
+            ),
+            array(
+              'name' => 'naam',
+              'type' => 'string',
+              'description' => 'naam',
+              'source' => array('param' => 'naam'),
+              'optional' => TRUE,
+            ),
+            array(
+              'name' => 'registratie',
+              'type' => 'string',
+              'description' => 'registratie',
+              'source' => array('param' => 'registratie'),
+              'optional' => TRUE,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return $api;
+}
+
+/**
+* Callback function for leden retrieve
+* @param string $resource_id <id> of record OR <afkorting> to be selected
+* @param string $code comma separated value(s) for field ezac_Leden.Code
+* @param int $actief 1=return only where ezac_Leden.Actief=1
+* @return array xml or json formatted list of ezac_Leden records
+*/
+function _ezacservices_leden_retrieve($resource_id, $code = 'VL', $actief = 1) {
+  // Check permission
+  /*
+  if (!user_access('EZACservices leden retrieve')) { //TODO Overbodig?
+    return services_error('Unauthorized', 401);
+  }*/
+
+  // Check for mad values
+
+  // required parameters available or default values generated?
+  if (!isset($resource_id)) {
+        return services_error('Missing resource id', 406);
+      }
+  if (!isset($code)) {
+        return services_error('Missing parameter code', 406);
+      }
+  if (!isset($actief)) {
+        return services_error('Missing parameter actief', 406);
+      }
+      
+  
+  // handle resource_id parameter
+  // either a numeric value for field Id
+  // or a alphanumeric value for field Afkorting
+  // or '*' to select all records
+  if ($resource_id == '*') { // select all records
+    $id = '*';
+  }
+  elseif (!$resource_id == intval($resource_id)) { //not numeric means afkorting
+    // check whether Afkorting exists
+    if (strpos($resource_id, ';')) { //prevent sql insertion
+        $errmsg = 'Invalid Id value [' .$resource_id .']';
+      return services_error($errmsg, 406);
+    }
+    $query = db_select('ezac_Leden', 'l');
+    $query->fields('l', array('Id'));
+    $query->condition('l.Afkorting', $resource_id, '=');
+    $id = $query->execute()->fetchField(); //get Id for record with Afkorting
+    if (!isset($id)) { //does not exist
+        $errmsg = 'Invalid value for Afkorting [' .$afkorting .']';
+        return services_error($errmsg, 406);
+        }
+  }
+  else { //resource_id indicates a value for Id
+    // select one record
+    $id = $resource_id;
+  }
+  
+  // handle code parameter
+  //set up array with acceptable code values
+  // read all codes used
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('Code'));
+  $query->distinct(); //get unique values for Code
+  $query->orderBy('l.Code', 'ASC');
+  $code_list = $query->execute()->fetchCol();
+  
+  //$code may contain a comma delimited list of requested soort values
+  $codes = explode(',', $code); 
+  //check $codes values against values used in database
+  foreach ($codes as $c) {
+    if (!in_array($c, $code_list)) {
+        $errmsg = 'Invalid code value [' . $c .']';
+        return services_error($errmsg, 406);
+    }
+  }
+  
+  //check $actief to be 0 or 1
+  $actief = intval($actief);
+  // check $actief to be 1 otherwise set to 0
+  if (!isset($actief)) $actief = 1;
+  if ($actief <> 1) $actief = 0;
+  
+  //execute the query
+  return ezacservices_find_leden_items($id, $codes, $actief);
+}
+
+/**
+* Gets leden records
+* @param string $id either '*' for all records or numeric value for Id
+* @param array $codes array of ezac_Leden.Code values to be selected
+* @param int $actief 1=return only where ezac_Leden.Actief=1
+* @return array list of ezac_Leden records
+*/
+function ezacservices_find_leden_items($id, $codes, $actief) {
+  // Compose query
+  $query = db_select('ezac_Leden', 'l');
+  // Idea: field list could be (selectively) loaded from parameter 'fields' to enhance flexibility of the API
+  $query->fields('l', array('Id', 'Voorvoeg', 'Achternaam', 'Afkorting', 'Voornaam', 'Voorletter', 'Adres', 'Postcode',
+                            'Plaats', 'Land', 'Telefoon', 'Mobiel', 'Code', 'Actief', 'Instructie', 'E_mail'));
+  
+  // if $id <> '*' select one record
+  if ($id <> '*') {
+    $query->condition('l.Id', $id, '=');
+  }
+  else { //select multiple records according to Code and Actief filters
+    $query->condition('l.Code', $codes, 'IN'); 
+    // Only Actief?
+    if ($actief) {
+     $query->condition('l.Actief', 0, '<>'); // only return records where Actief = true
+    }
+    $query->orderBy('l.Achternaam', 'ASC');
+  }
+
+  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  return $items;
+}
+
+/**
+* Callback function for kisten retrieve
+* @param string $registratie '*' for all or comma separated value(s) for field ezac_Kisten.Registratie
+* @param int $actief 1=return only where ezac_Kisten.Actief=1
+* @return array xml or json formatted list of ezac_Kisten records
+*/
+function _ezacservices_kisten_retrieve($registratie, $actief = 1) {
+  // Check permission
+  /*
+  if (!user_access('EZACservices kisten retrieve')) {
+    return services_error('Unauthorized', 401);
+  }*/
+  // Check for mad values
+
+  // required parameters available or default values generated?
+  if (!isset($actief)) {
+        return services_error('Missing parameter actief', 406);
+      }
+  
+  if ($registratie == NULL) unset($registratie);
+  if (isset($registratie)) {
+    if ($registratie == '*') {
+      // select all records
+      $regs = NULL; // indicates select all records OR DO NOT SET $regs AT ALL?
+    }
+    else {
+      //set up array with acceptable Registratie values
+      // read all Registratie used
+      $query = db_select('ezac_Kisten', 'k');
+      $query->fields('k',array('Registratie'));
+      $query->distinct(); //get unique values for Registratie
+      $query->orderBy('k.Registratie', 'ASC');
+      $reg_list = $query->execute()->fetchCol();
+      
+      //$registratie may contain a comma delimited list of requested soort values
+      $regs = explode(',', $registratie); 
+      //check $codes values against values used in database
+      
+      foreach ($regs as $r) {
+        if (!in_array($r, $reg_list)) {
+            $errmsg = 'Unknown registratie value [' . $r .']';
+            return services_error($errmsg, 406);
+        }
+      }
+    }
+  }
+  
+  //check $actief to be 0 or 1
+  $actief = intval($actief);
+  // check $actief to be 1 otherwise set to 0
+  if (!isset($actief)) $actief = 1;
+  if ($actief <> 1) $actief = 0;
+  
+  //execute the query
+  return ezacservices_find_kisten_items($regs, $actief);
+}
+
+/**
+* Gets kisten records
+* @param array $codes array of ezac_Leden.Code values to be selected
+* @param int $actief 1=return only where ezac_Leden.Actief=1
+* @return array list of ezac_Leden records
+*/
+function ezacservices_find_kisten_items($regs, $actief) {
+  // Compose query
+  $query = db_select('ezac_Kisten', 'k');
+  // Idea: field list could be (selectively) loaded from parameter 'fields' to enhance flexibility of the API
+  $query->fields('k', array('Registratie', 'Callsign', 'Type', 'Bouwjaar', 'Inzittenden', 'Opmerking',
+                            'Eigenaar', 'Prive', 'Actief'));
+  if (isset($regs)) {
+    $query->condition('k.Registratie', $regs, 'IN');
+  }
+  // Only Actief?
+  if ($actief) {
+   $query->condition('k.Actief', 0, '<>'); // only return records where Actief = true
+  }
+  $query->orderBy('k.Registratie', 'ASC');
+
+  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  return $items;
+}
+
+
+/**
+ * Helper function to verify dates
+ * @param string $datum
+ * datum to be verified
+ * @param string &$datumStart
+ * @param string &$datumEnd
+ **/
+function ezacservices_check_datum($datum, &$datumStart, &$datumEnd) {
+  //Verify $datum as YYYY-MM-DD, YYYY-MM or YYYY
+  $datum_delen = explode('-', $datum);
+  switch (strlen($datum)) {
+    case 4: //YYYY
+        if (!checkdate(01, 01, $datum_delen[0])) {
+            $errmsg = 'Invalid value parameter datum YYYY [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum .'-01-01';
+        $datumEnd   = $datum .'-12-31';
+        break;
+    case 7: //YYYY-MM
+        if (!checkdate($datum_delen[1], 01, $datum_delen[0])) {
+            $errmsg = 'Invalid value parameter datum YYYY-MM [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum .'-01';
+        if     (checkdate($datum_delen[1], 31, $datum_delen[0])) $datumEnd = $datum .'-31';
+        elseif (checkdate($datum_delen[1], 30, $datum_delen[0])) $datumEnd = $datum .'-30';
+        elseif (checkdate($datum_delen[1], 29, $datum_delen[0])) $datumEnd = $datum .'-29';
+        elseif (checkdate($datum_delen[1], 28, $datum_delen[0])) $datumEnd = $datum .'-28';
+        break;
+    case 10: //YYYY-MM-DD
+        if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) { //mm dd yyyy
+            $errmsg = 'Invalid value parameter datum YYYY-MM-DD [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum; // .' 00:00:00');
+        $datumEnd   = $datum; // .' 23:59:59');
+        break;
+    default: //invalid
+        $errmsg = 'Invalid length parameter datum [' .$datum .']';
+        return services_error($errmsg, 406);
+  }
+}
+
+
+/**
+* Callback function for starts retrieve
+* @param string $resource_id value for start record OR datum value in YYYY[-mm[-dd]] format (van:tot)
+* $param string $naam value for Gezagvoerer or Tweede (optional)
+* @return array xml or json formatted list of ezac_Starts records
+*/
+function _ezacservices_starts_retrieve($resource_id, $datum, $naam, $registratie) { 
+  // Check permission
+  // TODO this may not be required
+  /*
+  if (!user_access('EZACservices starts retrieve')) {
+    return services_error('Unauthorized', 401);
+  } */
+  // Check for mad values
+
+    if ($resource_id <> '*') { // select specific record
+      if (!is_numeric($resource_id)) {
+        $errmsg = 'Id value not allowed [' .$resource_id .']';
+        return services_error($errmsg, 406);
+      }
+      $id = intval($resource_id);
+      //return 'zoek op id ' .$id;
+      return ezacservices_find_starts_items_by_id($id); // select one start record by id
+    }
+  //$resource_id = *
+  if (isset($naam)) { //select start records for gezagvoerder = $naam OR tweede = $naam
+    //sanitize $naam
+    $naam = trim(urldecode($naam)); //urldecode required or implemented by services?
+    if (strpos($naam, ';')) { //do not allow semicolon to prevent sql insertion
+        $errmsg = 'Naam value not allowed [' .$naam .']';
+        return services_error($errmsg, 406);
+    }
+  }
+  if (isset($registratie)) { //select start records for gezagvoerder = $naam OR tweede = $naam
+    //sanitize $naam
+    $registratie = trim(urldecode($registratie)); //urldecode required or implemented by services?
+    if (strpos($registratie, ';')) { //do not allow semicolon to prevent sql insertion
+        $errmsg = 'Registratie value not allowed [' .$registratie .']';
+        return services_error($errmsg, 406);
+    }
+  }
+  
+  // required parameters available or default values generated?
+  if (!isset($datum) or $datum == NULL) {
+        $datum = date('Y-m-d'); //defaults to today as YYYY-MM-DD
+        //return services_error('Missing parameter datum', 406);
+      }
+  
+  //if $datum is a range, split and process
+  // range is indicated by date:date format
+  if (strpos($datum, ':')) {
+    $datum_range = explode(':',$datum);
+    ezacservices_check_datum($datum_range[0], $datumStart, $datumEnd);
+    $ds = $datumStart;
+    ezacservices_check_datum($datum_range[1], $datumStart, $datumEnd);
+    $de = $datumEnd;
+    return ezacservices_find_starts_items_by_date($ds, $de, $naam, $registratie);
+  }
+  else { //single date
+    ezacservices_check_datum($datum, $datumStart, $datumEnd);
+    return ezacservices_find_starts_items_by_date($datumStart, $datumEnd, $naam, $registratie);
+  }
+}
+
+/**
+* Gets starts records
+* @param string $datumStart timestamp
+*       lower boundary
+* @param string $datumEnd timestamp
+*       higher boundary
+* @param string $naam afkorting
+* @param string $registratie registratie
+*       
+* @return array
+*       list of ezac_Starts records within Datum boundaries
+*/
+function ezacservices_find_starts_items_by_date($datumStart, $datumEnd, $naam, $registratie) {
+  // Compose query
+  $query = db_select('ezac_Starts', 's');
+  $query->fields('s'); //SELECT * from ezac_starts
+  //$query->fields('s', array('Id', 'Datum', 'Registratie', 'Gezagvoerder', 'Tweede', 'Soort', 'Startmethode', 'Start', 'Landing','Duur',
+  //                          'Instructie', 'Opmerking'));
+  $query->condition('s.datum', array($datumStart, $datumEnd), 'BETWEEN');
+
+  if (isset($naam)) {
+    $query->condition(db_or()->condition('s.gezagvoerder', $naam, '=')
+                             ->condition('s.tweede', $naam, '=')); //$gezagvoerder = $naam OR $Tweede = $naam
+  }
+  if (isset($registratie)) {
+    $query->condition('s.registratie', $registratie, '=');
+  }
+
+  $query->orderBy('s.datum', 'ASC');
+  $query->orderBy('s.start', 'ASC');
+
+  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  return $items;
+}
+
+/**
+* Gets one starts records
+* @param int $id
+*       Id of record selected
+* @return array
+*       ezac_Starts record with Id = $id
+*/
+function ezacservices_find_starts_items_by_id($id) {
+  // Compose query
+  $query = db_select('ezac_Starts', 's');
+  //$query->join opmerking
+  $query->fields('s'); //SELECT * from ezac_Starts
+  $query->condition('s.id', $id, '=');
+
+  $items = $query->execute()->fetchAll(); 
+  return $items;
+}
+
+
+/**
+* Callback function for starts index
+* @param string $datum for field ezac_Starts.Datum in YYYY[-MM[-DD]] format
+* @param string $naam for Gezagvoerder OR Tweede == $naam
+* @return array xml or json formatted list of ezac_Starts records
+*/
+function _ezacservices_starts_index($datum, $naam, $registratie) { 
+  // Check permission
+  /*
+  if (!user_access('EZACservices starts index')) {
+    return services_error('Unauthorized', 401);
+  }*/
+  // Check for mad values
+
+  if (isset($naam)) { //select start records for gezagvoerder = $naam OR tweede = $naam
+    //sanitize $naam
+    $naam = trim(urldecode($naam)); //urldecode required or implemented by services?
+    if (strpos($naam, ';')) { //do not allow semicolon to prevent sql insertion
+        $errmsg = 'Naam value not allowed - [' .$naam .']';
+        return services_error($errmsg, 406);
+    }
+  }
+  if (isset($registratie)) { //select start records for registratie = $registratie
+    //sanitize $registratie
+    $registratie = trim(urldecode($registratie)); //urldecode required or implemented by services?
+    if (strpos($registratie, ';')) { //do not allow semicolon to prevent sql insertion
+        $errmsg = 'Registratie value not allowed - [' .$registratie .']';
+        return services_error($errmsg, 406);
+    }
+  }
+  
+  // required parameters available or default values generated?
+  if (!isset($datum) or $datum == NULL) {
+        $datum = date('Y-m-d'); //defaults to today as YYYY-MM-DD
+        //return services_error('Missing parameter datum', 406);
+      }
+   
+  //Verify $datum as YYYY-MM-DD, YYYY-MM or YYYY
+  $datum_delen = explode('-', $datum);
+  switch (strlen($datum)) {
+    case 4: //YYYY
+        if (!checkdate(01, 01, $datum_delen[0])) {
+            $errmsg = 'Invalid value parameter datum YYYY [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum .'-01-01';
+        $datumEnd   = $datum .'-12-31';
+        break;
+    case 7: //YYYY-MM
+        if (!checkdate($datum_delen[1], 01, $datum_delen[0])) {
+            $errmsg = 'Invalid value parameter datum YYYY-MM [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum .'-01';
+        if     (checkdate($datum_delen[1], 31, $datum_delen[0])) $datumEnd = $datum .'-31';
+        elseif (checkdate($datum_delen[1], 30, $datum_delen[0])) $datumEnd = $datum .'-30';
+        elseif (checkdate($datum_delen[1], 29, $datum_delen[0])) $datumEnd = $datum .'-29';
+        elseif (checkdate($datum_delen[1], 28, $datum_delen[0])) $datumEnd = $datum .'-28';
+        break;
+    case 10: //YYYY-MM-DD
+        if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) { //mm dd yyyy
+            $errmsg = 'Invalid value parameter datum YYYY-MM-DD [' .$datum .']';
+            return services_error($errmsg, 406);
+        }
+        $datumStart = $datum; // .' 00:00:00');
+        $datumEnd   = $datum; // .' 23:59:59');
+        break;
+    default: //invalid
+        $errmsg = 'Invalid length parameter datum [' .$datum .']';
+        return services_error($errmsg, 406);
+  }
+    //execute the query
+  return ezacservices_index_starts_by_date($datumStart, $datumEnd, $naam, $registratie);
+}
+
+/**
+* Index starts records
+* @param string $datumStart timestamp
+*       lower boundary
+* @param string $datumEnd timestamp
+*       higher boundary
+* @return array
+*       index list of ezac_Starts records within Datum boundaries
+*/
+function ezacservices_index_starts_by_date($datumStart, $datumEnd, $naam, $registratie) {
+  // Compose query
+  $query = db_select('ezac_Starts', 's');
+  $query->fields('s', array('id', 'datum')); //SELECT * from ezac_starts
+  $query->condition('s.datum', array($datumStart, $datumEnd), 'BETWEEN');
+
+  if (isset($naam)) {
+    $query->condition(db_or()->condition('s.gezagvoerder', $naam, '=')
+                             ->condition('s.tweede', $naam, '=')); //$gezagvoerder = $naam OR $Tweede = $naam
+  }
+
+  if (isset($registratie)) {
+    $query->condition('s.registratie', $registratie, '=');
+  }
+  $query->orderBy('s.datum', 'ASC');
+  $query->orderBy('s.start', 'ASC');
+
+  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  foreach ($items as $item) {
+    $datum = substr($item->datum,0,10);
+    if (!isset($index[$datum])) {
+        $index[$datum] = 1;
+    }
+    else {
+        $index[$datum]++; // increment value for each record
+    }
+  }
+  return $index;
+}
+
+/**
+* Callback function for starts create
+* @param string $datum
+* @param string(10) $registratie
+* @param string(20) $gezagvoerder numeric id | Afkorting | text value
+* @param string(20) $tweede numeric id | Afkorting | text value
+* @param string(4) $soort <empty> | CLUB | DONA | PASS
+* @param string(1) $startmethode L | M | S
+* @param time $start
+* @param time $landing
+* @param time $duur
+* @param int(1) $instructie 0 | 1
+* @param string(30) $opmerking
+* @return int $Id of created record
+*/
+function _ezacservices_starts_create($datum, $registratie, $gezagvoerder, $tweede, $soort,
+                                     $startmethode, $start, $landing, $duur, $instructie, $opmerking) {
+  // Check permission
+  /*
+  if (!user_access('EZACservices starts create')) {
+    return services_error('Unauthorized', 401);
+  }*/
+
+  // build $start_record struct
+    $start_record->datum = $datum;
+    $start_record->registratie = $registratie;
+    $start_record->gezagvoerder = $gezagvoerder;
+    $start_record->tweede = $tweede;
+    $start_record->soort = $soort;
+    $start_record->startmethode =$startmethode;
+    $start_record->start = $start;
+    if (isset($landing)) {
+        $start_record->landing = $landing;
+    }
+    $start_record->duur = $duur;
+    $start_record->instructie = $instructie;
+    if (isset($opmerking)) {
+        $start_record->opmerking = $opmerking;
+    }    
+    //verify the record
+    ezacservices_starts_check($start_record);
+    
+    //execute the query
+  return ezacservices_starts_create_item($start_record); 
+}
+
+/**
+* Checks a starts record
+* @param array &$start_record
+* @return void when ok
+* @return services_error when error
+**/
+function ezacservices_starts_check(&$start_record) {
+    // check required fields
+    if (!isset($start_record->datum)) {
+        return services_error('Missing start field datum', 406);
+    }
+    if (!isset($start_record->registratie)) {
+        return services_error('Missing start field registratie', 406);
+    }
+    if (!isset($start_record->gezagvoerder)) {
+        return services_error('Missing start field gezagvoerder', 406);
+    }
+    if (!isset($start_record->tweede)) {
+        return services_error('Missing start field tweede', 406);
+    }
+    if (!isset($start_record->soort)) {
+        return services_error('Missing start field soort', 406);
+    }
+    if (!isset($start_record->startmethode)) {
+        return services_error('Missing start field startmethode', 406);
+    }
+    if (!isset($start_record->start)) {
+        return services_error('Missing start field start', 406);
+    }
+    if (!isset($start_record->instructie)) {
+        return services_error('Missing start field instructie', 406);
+    }
+    /* landing is optional
+    if (!isset($start_record->landing)) {
+        return services_error('Missing start field landing', 406);
+    }
+    if (!isset($start_record->opmerking)) { //optioneel
+        return services_error('Missing start field opmerking', 406);
+    }
+    */
+    
+    //check datum to be valid
+    date_default_timezone_set('UTC'); //prevent adding one hour to duur due to timezone difference
+    $datum_delen = explode('-',$start_record->datum);
+    if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) {
+        $errmsg = 'Invalid datum value [' .$start_record->datum .']';
+        return services_error($errmsg, 406);
+    }
+    //check registratie to be valid format xx-xxxx
+    if (!strpos($start_record->registratie, '-')) {
+        $errmsg = 'Invalid registratie value [' .$start_record->registratie .']';
+        return services_error($errmsg, 406);
+    }
+    //gezagvoerder is either id/afkorting or full name (unknown)
+    if (is_numeric($start_record->gezagvoerder)) {
+        $id_val = intval($start_record->gezagvoerder);
+        // check existance
+        $query = db_select('ezac_Leden', 'l');
+        $query->fields('l', array('Afkorting'));
+        $query->condition('l.Id', $id_val, '=');
+        $afkorting = $query->execute()->fetchCol();
+        if ($afkorting == null) { // not found
+            $errmsg = 'Invalid gezagvoerder value [' .$start_record->gezagvoerder .']';
+            return services_error($errmsg, 406);
+        }
+        $start_record->gezagvoerder = $afkorting; //replace Id with Afkorting
+    }
+    elseif (strlen($start_record->gezagvoerder) > 20) {
+        $start_record->gezagvoerder = substr(trim($start_record->gezagvoerder), 0, 20);
+    }
+    //tweede (inzittende) is either id/afkorting or full name (unknown)
+    //TODO check for isset(tweede)
+    if (is_numeric($start_record->tweede)) {
+        $id_val = intval($start_record->tweede);
+        // check existance
+        $query = db_select('ezac_Leden', 'l');
+        $query->fields('l', array('Afkorting'));
+        $query->condition('l.Id', $id_val, '=');
+        $afkorting = $query->execute()->fetchCol();
+        if ($afkorting == null) { // not found
+            $errmsg = 'Invalid tweede value [' .$start_record->tweede .']';
+            return services_error($errmsg, 406);
+        }
+        $start_record->tweede = $afkorting; //replace Id with Afkorting
+    }
+    elseif (strlen($start_record->tweede) > 20) {
+        $start_record->tweede = substr(trim($start_record->tweede), 0, 20);
+    }
+    //soort is in <empty>, CLUB, DONA, PASS, 1E, 2E
+    $soorten = array('', 'CLUB', 'DONA', 'PASS', '1E', '2E');
+    if (!in_array($start_record->soort, $soorten)) {
+        $errmsg = 'Invalid soort value [' .$start_record->soort .']';
+        return services_error($errmsg, 406);
+    }
+    //startmethode is in L, S, M
+    if (!in_array($start_record->startmethode, array('L', 'S', 'M'))) {
+        $errmsg = 'Invalid startmethode value [' .$start_record->startmethode .']';
+        return services_error($errmsg, 406);
+    }
+    //start is valid time
+    if (!in_array(strlen($start_record->start), array(5, 8))) { //HH:MM[:SS]
+        $errmsg = 'Invalid start time length HH:MM[:SS] [' .$start_record->start .']';
+        return services_error($errmsg, 406);
+        }
+    $start_delen = explode(':',$start_record->start);
+    if (intval($start_delen[0]>23)) {
+        $errmsg = 'Invalid start hour value [' .$start_record->start .']';
+        return services_error($errmsg, 406);
+    }
+    if (intval($start_delen[1]>59)) {
+        $errmsg = 'Invalid start minute value [' .$start_record->start .']';
+        return services_error($errmsg, 406);
+    }
+    $start = strtotime($start_record->datum .' ' .$start_record->start);
+    $start_record->start = date('Y-m-d H:i:s',$start); //construct valid datetime format
+    
+    //landing is valid time and later than start
+    if (!in_array(strlen($start_record->landing), array(0, 5, 8))) { //HH:MM[:SS]
+        $errmsg = 'Invalid landing time length HH:MM [' .$start_record->landing .']';
+        return services_error($errmsg, 406);
+        }
+    if (isset($start_record->landing)) {
+        $landing_delen = explode(':',$start_record->landing);
+        if (intval($landing_delen[0]>23)) {
+            $errmsg = 'Invalid landing hour value [' .$start_record->landing .']';
+            return services_error($errmsg, 406);
+        }
+        if (intval($landing_delen[1]>59)) {
+            $errmsg = 'Invalid landing minute value [' .$start_record->landing .']';
+            return services_error($errmsg, 406);
+        } // @TODO tijden inclusief seconden
+        if (intval($landing_delen[2]>59)) {
+            $errmsg = 'Invalid landing seconden value [' .$start_record->landing .']';
+            return services_error($errmsg, 406);
+        } // @TODO tijden inclusief seconden
+        $landing = strtotime($start_record->datum .' ' .$start_record->landing);
+        $start_record->landing = date('Y-m-d H:i:s',$landing); //construct valid datetime format
+        if ($landing < $start) {
+            $errmsg = 'Landing before start [' .$start_record->landing .']';
+            return services_error($errmsg, 406);
+        }
+        //duur is calculated
+        $start_record->duur = date('Y-m-d H:i:s', $landing-$start);
+    }
+    else {
+        $landing = null; //not yet landed
+        $start_record->duur = date('Y-m-d H:i:s', 0);
+    }
+
+    //instructie is 1 or 0
+    if (!is_numeric($start_record->instructie)) {
+        $errmsg = 'Instructie must be numeric 0 or 1 [' .$start_record->instructie .']';
+        return services_error($errmsg, 406);
+    }
+    if (!$start_record->instructie === intval($start_record->instructie)) {
+        $errmsg = 'Instructie must be 0 or 1 [' .$start_record->instructie .']';
+        return services_error($errmsg, 406);
+    }
+    if (!in_array($start_record->instructie, array(0,1))) {
+        $errmsg = 'Instructie must be 0 or 1 [' .$start_record->instructie .']';
+        return services_error($errmsg, 406);
+    }
+
+    //opmerking is optional, max 30 chars
+    if (isset($start_record->opmerking)) {
+        $start_record->opmerking = substr(trim($start_record->opmerking), 0, 30);
+    }
+    else $start->opmerking = ''; //empty
+    
+    return;
+}
+
+/**
+* Creates a starts record
+* @param array $item 
+*       start record
+* @return int $Id
+*       Id of start record created
+*/
+function ezacservices_starts_create_item($start_record) {
+  // Compose query
+  
+$id = db_insert('ezac_Starts')
+  ->fields(array(
+    'datum' => $start_record->datum,
+    'registratie' => $start_record->registratie,
+    'gezagvoerder' => $start_record->gezagvoerder,
+    'tweede' => $start_record->tweede,
+    'soort' => $start_record->soort,
+    'startmethode' => $start_record->startmethode,
+    'start' => $start_record->start,
+    'landing' => (isset($start_record->landing)) ? $start_record->landing : null,
+    'duur' => $start_record->duur,
+    'instructie' => $start_record->instructie,
+    'opmerking' => (isset($start_record->opmerking)) ? $start_record->opmerking : null,
+  ))
+  ->execute();
+  return $id;
+}
+
+/**
+* Callback function for starts update
+* @param string $fn CRUD function = update
+* @param object $start 
+* @return Nr of affected records (should be 1)
+*/
+function _ezacservices_starts_update($id, $datum, $registratie, $gezagvoerder, $tweede, $soort, $startmethode,
+                                     $start, $landing, $duur, $instructie, $opmerking) {
+  // Check permission
+  /*
+  if (!user_access('EZACservices starts create')) {
+    return services_error('Unauthorized', 401);
+  }*/
+
+    // build $start_record struct
+    $start_record->id = $id; 
+    $start_record->datum = $datum;
+    $start_record->registratie = $registratie;
+    $start_record->gezagvoerder = $gezagvoerder;
+    $start_record->tweede = $tweede;
+    $start_record->soort = $soort;
+    $start_record->startmethode = $startmethode;
+    $start_record->start = $start;
+    if (isset($landing)) {
+        $start_record->landing = $landing;
+    }
+    $start_record->duur = $duur;
+    $start_record->instructie = $instructie;
+    if (isset($opmerking)) {
+        $start_record->opmerking = $opmerking;
+    }
+    //verify the record
+    ezacservices_starts_check($start_record);
+    
+    //execute the query
+  return ezacservices_starts_update_item($start_record); 
+}
+
+/**
+* Updates a starts record
+* @param array $item 
+*       start record
+* @return Nr of affected records (should be 1)
+*/
+function ezacservices_starts_update_item($start_record) {
+  // Compose query
+  
+$Nr_affected = db_update('ezac_Starts')
+  ->fields(array(
+    //'Id' => $start_record->id,
+    'datum' => $start_record->datum,
+    'registratie' => $start_record->registratie,
+    'gezagvoerder' => $start_record->gezagvoerder,
+    'tweede' => $start_record->tweede,
+    'soort' => $start_record->soort,
+    'startmethode' => $start_record->startmethode,
+    'start' => $start_record->start,
+    'landing' => (isset($start_record->landing)) ? $start_record->landing : null,
+    'duur' => $start_record->duur,
+    'instructie' => $start_record->instructie,
+    'opmerking' => (isset($start_record->opmerking)) ? $start_record->opmerking : null,
+  ))
+  ->condition('id', $start_record->id, '=')
+  ->execute();
+  return $Nr_affected;
+}
+
+/**
+* Callback function for starts delete
+* @param string $fn CRUD function = delete
+* @param string $datum for field ezac_Starts.Datum in YYYY-MM-DD format
+* @param int $id for selection of teh start recotd to be deletede
+* @return Nr of affected rows
+*/
+function _ezacservices_starts_delete($resource_id, $datum) { 
+  // Check permission
+  /*
+  if (!user_access('EZACservices starts delete')) {
+    return services_error('Unauthorized', 401);
+  }*/
+  // Check for mad values
+
+  if (!isset($resource_id)) { 
+      $errmsg = 'Missing parameter id';
+      return services_error($errmsg, 406);
+  }
+  
+  if (!$resource_id == intval($resource_id)) { //Invalid value
+      $errmsg = 'Invalid value parameter id [' .$resource_id .']';
+      return services_error($errmsg, 406);
+  }
+  if (!isset($datum)) { 
+      $errmsg = 'Missing parameter datum';
+      return services_error($errmsg, 406);
+  }
+   
+  //Verify $datum as YYYY-MM-DD
+  if (strlen($datum) <> 10) {
+        $errmsg = 'Invalid length parameter datum YYYY-MM-DD [' .$datum .']';
+        return services_error($errmsg, 406);
+  }
+    //execute the query
+  return ezacservices_delete_starts($resource_id, $datum);
+}
+
+/**
+* Deletes a starts record
+* @param int $id Id value of the record to be deleted
+* @param string $datum YYYY-MM-DD
+* @return Nr of affected records (should be 1)
+*/
+function ezacservices_delete_starts($id, $datum) {
+  // Compose query
+
+  //Check validity of $datum in start record with Id=$id
+  $datum_check = db_select('ezac_Starts', 's')
+    ->fields('s', array('datum'))
+    ->condition('s.id', $id, '=')
+    ->condition('s.datum', $datum, '=')
+    ->execute()
+    ->rowCount();
+  if ($datum_check <> 1) {
+    $errmsg = 'Invalid value datum [' .$datum .']';
+    return services_error($errmsg, 406);
+  } 
+
+  $Nr_affected = db_delete('ezac_Starts')
+    ->condition('id', $id, '=')
+    ->execute();
+  return $Nr_affected;
+}

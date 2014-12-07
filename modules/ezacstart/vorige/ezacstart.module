@@ -1,0 +1,1758 @@
+<?php
+// $Id$
+
+/***
+* EZAC startlijst v7.x-1.0
+* 
+* Functie: inzage van startlijst
+* 
+* Toon aantal starts (jaar, maand)
+* Selecteer een periode
+* Toon starts in tabel;
+* 
+*/
+
+/**
+* Globals
+*/
+  global $base_url;
+  DEFINE ('EZAC_ENDPOINT', "$base_url/api/");
+  //drupal_set_message(EZAC_ENDPOINT ." in gebruik"); //DEBUG
+  //DEFINE ('EZAC_ENDPOINT', 'http://www.ezac.nl/drupal/api/'); //production host
+  global $datum_default;
+  global $maand_default;
+  global $jaar_default;
+  
+  $datum_default = ($datum_default == '') ? date('Y-m-d') : $datum_default;
+  $maand_default = ($maand_default == '') ? date('Y-m') : $maand_default;
+  $jaar_default  = ($jaar_default == '') ? date('Y') : $jaar_default;
+
+/**
+* Implementation of hook_permission().
+*/
+function ezacstart_permission() {
+  return array(
+    'ezac_start_view' => array(
+      'title' => t('EZAC startlijst inzage'),
+      'description' => t('Bekijken EZAC startlijst.'),
+    ),
+    'ezac_start_edit' => array(
+      'title' => t('EZAC startlijst wijzigen'),
+      'description' => t('Wijzigen EZAC startlijst.'),
+    ),
+  );
+}
+
+/**
+* Implementation of hook_menu().
+*/
+function ezacstart_menu() {
+  //prepare dates for menu items
+  $dag = date('Y-m-d');
+  $maand = date('Y-m');
+  $jaar = date('Y');
+  //build menu
+  $items = array();
+    $items['startlijst'] = array(
+      'title' => 'EZAC startlijst',
+      'description'=> 'Inzage EZAC startlijst',
+      'page callback' => '_ezacstart_vandaag',
+      'page arguments' => '', //array(2),  // datum
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_NORMAL_ITEM
+    ); 
+  $items['startlijst/vandaag'] = array(
+      'title' => 'Vandaag',
+      'description'=> 'Startlijst van vandaag',
+      'page callback' => '_ezacstart_datum',
+      'page arguments' => array($dag, '0'), //vandaag voor iedereen
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => 0, 
+    );
+  $items['startlijst/dag'] = array( //nieuw toegevoegd
+      'title' => 'Dag',
+      'description'=> 'Startlijst per dag',
+      'page callback' => '_ezacstart_datum',
+      'page arguments' => array($dag, '1'), //datum for current user
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 1,
+    );
+  $items['startlijst/maand'] = array(
+      'title' => 'Maand',
+      'description'=> 'Startlijst per maand',
+      'page callback' => '_ezacstart_datum',
+      'page arguments' => array($maand, '1'), //maand voor user
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 2,
+    );
+  $items['startlijst/jaar'] = array(
+      'title' => 'Jaar',
+      'description'=> 'Startlijst per jaar',
+      'page callback' => '_ezacstart_datum',
+      'page arguments' => array($jaar,'1'), //jaar voor user
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 3,
+    );
+  $items['startlijst/brevet'] = array(
+      'title' => '12 maanden',
+      'description'=> 'Gegevens voor brevet verlenging',
+      'page callback' => '_ezacstart_brevet',
+      'page arguments' => array(2), //jaar of starts record
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 4,
+    );
+  $items['startlijst/overzicht'] = array(
+      'title' => 'Vliegdagen',
+      'description'=> 'Overzicht vliegdagen',
+      'page callback' => '_ezacstart_overzicht',
+      'page arguments' => array(2), //datum
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 5,
+    );
+  $items['startlijst/create'] = array(
+      'title' => 'Aanmaken',
+      'description'=> 'Aanmaken start',
+      'page callback' => '_ezacstart_create',
+      'page arguments' => '',
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 6,
+    );
+  $items['startlijst/rapport'] = array(
+      'title' => 'Rapport',
+      'description'=> 'Rapportage',
+      'page callback' => '_ezacstart_report',
+      'page arguments' => array(2), //datum,
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_edit'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 7,
+    );
+  $items['startlijst/edit'] = array(
+      'title' => 'Wijzigen',
+      'description'=> 'Wijzigen start',
+      'page callback' => '_ezacstart_edit',
+      'page arguments' => array(2), //id of starts record
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_CALLBACK,
+    );
+  $items['startlijst/browse'] = array(
+      'title' => 'Inzien per dag',
+      'description'=> 'Startlijst per dag',
+      'page callback' => '_ezacstart_browse',
+      'page arguments' => array(2, 3), //datum en naam
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_CALLBACK,
+    );
+
+  return $items;
+}
+
+/**
+ * Helper function to show datum
+ */
+function ezacstart_show_date($datum) {
+  //handle datum range
+  if (strpos($datum, ':')) { //date range given
+    $date_range = explode(':', $datum);
+    $dat_string = ezacstart_show_date($date_range[0]) .' - ' .ezacstart_show_date($date_range[1]);
+    return $dat_string;
+  }
+  $datumvalue = strtotime($datum);
+  $dat_string = '';
+  if (strlen($datum) > 7) {
+    $dat_string .= t(date('l', $datumvalue)); // dag van de week
+    $dat_string .= " " .t(date('j', $datumvalue)) ." "; // dag zonder nul
+  }
+  if (strlen($datum) > 4) {
+    $dat_string .= t(date('F', $datumvalue)) . " "; // maand volledig
+  }
+  $dat_string .= " " .t(date('Y', $datumvalue)); // jaar
+  return $dat_string;
+}
+
+/**
+ * helper function to find afkorting for current user
+ * @returns string $afkorting
+ */
+function ezacstart_get_afkorting() {
+  // find ezac_Leden Afkorting for logged-in user
+  global $user;
+  global $user_afkorting;
+  
+  $name = $user->name;
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('afkorting'));
+  $query->condition('l.User', $name, '=');
+  $afkorting = $query->execute()->fetchField();
+  $user_afkorting = $afkorting; // store for later use
+  return $afkorting;
+}
+
+/**
+ * helper function for finding a name
+ * @param string $name afkorting to be found
+ * @returns string naam when found else $name from input
+ */
+function ezacstart_find_name($afkorting) {
+  if ($afkorting == '') return '';
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('voornaam', 'voorvoeg', 'achternaam'));
+  $query->condition('l.afkorting', $afkorting, '=');
+  $helenaam = $query->execute()->fetchassoc();
+  if (isset($helenaam)) {
+    $naam = $helenaam['voornaam'];
+    if (isset($helenaam['voorvoeg'])) $naam .= ' ' .$helenaam['voorvoeg'] ;
+    $naam .= ' ' .$helenaam['achternaam'];
+  }
+  if ($helenaam == '') {
+    $naam = $afkorting;
+  }
+  return $naam;
+}
+
+/**
+ * Lees VL namen in tabel
+ */
+function ezacstarts_get_namen() {
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'));
+  $query->condition('l.code', 'VL', '=');
+  $query->condition('l.actief', '1', '=');
+  $query->orderBy('l.voornaam', 'ASC');
+  $query->orderBy('l.achternaam', 'ASC');
+  $namen = $query->execute()->fetchAll();
+  
+  foreach ($namen as $naam) {
+    $naam_tabel[$naam->afkorting] = sprintf("%s %s %s", $naam->voornaam, $naam->voorvoeg, $naam->achternaam);
+  }
+  return $naam_tabel;
+}
+
+/**
+ * Lees Kisten in tabel
+ */
+function ezacstarts_get_kisten() {
+  $query = db_select('ezac_Kisten', 'k');
+  $query->fields('k',array('registratie', 'inzittenden', 'prive'));
+  $query->condition('k.actief', '1', '=');
+  $query->orderBy('k.prive', 'ASC');
+  $query->orderBy('k.registratie', 'ASC');
+  $kisten = $query->execute()->fetchAll();
+  
+  foreach ($kisten as $kist) {
+    $kist_tabel[$kist->registratie] = $kist->inzittenden;
+  }
+  return $kist_tabel;
+}
+
+/**
+ * Create starts record
+ */
+function _ezacstart_create() {
+  return drupal_get_form('ezacstart_form', null); //null start record param means create new one
+}
+
+/**
+ *Edit starts record
+ *@param $id id of starts record
+ */
+function _ezacstart_edit($id) {
+  $starts = ezacstart_get_starts($id, null, null);
+  // $starts = result array with one record, select [0] for singleton
+  //variable_set('start_record', $starts[0]);
+  return drupal_get_form('ezacstart_form', $starts[0]);
+}
+
+/**
+* Build start form.
+* @param $start - starts data record (optional)
+*/
+function ezacstart_form($form = NULL, &$form_state, $start) {
+  // build form for start edit
+  global $datum_default;
+  global $namen;
+  global $kisten;
+  global $soorten;
+  global $methodes;
+  global $JaNee;
+
+  $afkorting = ezacstart_get_afkorting();
+  
+  //mag deze gebruiker elke start wijzigen / verwijderen?
+  //zo niet, dan alleen voor eigen starts toestaan
+  $may_edit = user_access('ezac_start_edit');
+    
+  //id datum registratie gezagvoerder tweede soort startmethode start landing duur instructie opmerking
+  $soorten = array('' => 'Normaal', 'CLUB' => 'Club', 'DONA' => 'Donateur', 'PASS' => 'Passagier');
+  $methodes = array('L' => 'Lier', 'S' => 'Sleep', 'M' => 'Motor');
+  $JaNee = array(t('Nee'),t('Ja'));
+  
+  $namen = ezacstarts_get_namen();
+  $namen[''] = '<leeg>';
+  $namen['Onbekend'] = '<Onbekend>';
+  
+  $kisten = ezacstarts_get_kisten();
+  foreach ($kisten as $registratie => $inzittenden) {
+    $kist_optie[$registratie] = "$registratie ($inzittenden)";
+  }
+  //Optie voor nieuwe kist toevoegen
+  $kist_optie['Onbekend'] = '<Onbekend>';
+  
+  if ($start == null) {
+    //new record
+    $new = TRUE;
+    //fill default values
+    $start['id'] = 0;
+    $start['datum'] = $datum_default;
+    $start['registratie'] = '';
+    $start['gezagvoerder'] = '';
+    $start['tweede'] = '';
+    $start['start'] = '';
+    $start['landing'] = '';
+    $start['duur'] = '';
+    $start['soort'] = 0;
+    $start['startmethode'] = 0;
+    $start['instructie'] = 0;
+    $start['opmerking'] = '';
+  }
+  else $new = FALSE;
+  
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = ($new) ? '<p><h2>Aanmaken start</h2></p>' : '<p><h2>Wijzigen start</h2></p>';
+  $form[0]['#weight'] = 0;
+  
+  $form['new'] = array(
+    '#title' => 'new',
+    '#type' => 'hidden',
+    '#value' => $new,
+  );
+  $form['id'] = array(
+  '#title' => t('id'),
+  '#type' => 'hidden',
+  '#default_value' => $start['id'],
+  '#description' => t('start id nummer'),
+  );
+  $form['datum'] = array(
+  '#title' => t('Datum'),
+  '#type' => 'date_popup',
+  '#date_format' => 'Y-m-d',
+  '#default_value' => $start['datum'],
+  '#description' => t('Datum start'),
+  '#weight' => 1,
+  );
+  $form['registratie'] = array(
+  '#title' => t('Registratie'),
+  '#type' => 'fieldset',
+  '#weight' => 2,
+  '#prefix' => '<div id="registratie">',
+  '#suffix' => '</div>',
+  );
+
+  $rd = isset($kist_optie[$start['registratie']]) ? $start['registratie'] : 'Onbekend';
+  $form['registratie']['reg'] = array(
+  '#title' => t('Registratie (bekend)'),
+  '#type' => 'select',
+  '#options' => $kist_optie,
+  '#default_value' => $rd,
+  '#description' => t('Registratie kist'),
+  '#maxlength' => 10,
+  '#required' => TRUE,
+  '#size' => 1,
+  '#weight' => 2,
+/*
+  '#ajax' => array(
+    'callback' => 'ezacstart_form_registratie_callback',
+    'wrapper' => 'registratie',
+    'effect' => 'fade',
+    ),
+    */
+  );
+  
+  //Create text field for onbekende registratie
+  if (!isset($form_state['values']['reg']) || $form_state['values']['reg'] == 'Onbekend') {
+    $form['registratie']['reg_onbekend'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Registratie (indien onbekend)'),
+      '#default_value' => $start['registratie'],
+      //'#description' => t('Registratie kist'),
+      '#maxlength' => 10,
+      '#required' => FALSE,
+      '#size' => 10,
+      '#weight' => 2.5,
+    );
+  }
+
+  $gz = isset($namen[$start['gezagvoerder']]) ? $start['gezagvoerder'] : 'Onbekend';
+  $form['gezagvoerder'] = array(
+  '#title' => t('Gezagvoerder'),
+  '#type' => 'select',
+  '#options' => $namen,
+  '#default_value' => $gz,
+  '#description' => t('Gezagvoerder'),
+  '#maxlength' => 10,
+  '#required' => FALSE,
+  '#size' => 1,
+  '#weight' => 3,
+  );
+
+  if (!isset($form_state['values']['gezagvoerder']) || $form_state['values']['gezagvoerder'] == 'Onbekend') {
+    $form['pic_onbekend'] = array(
+    '#title' => t('Gezagvoerder (indien onbekend)'),
+    '#type' => 'textfield',
+    '#default_value' => $start['gezagvoerder'],
+    //'#description' => t('Gezagvoerder'),
+    '#maxlength' => 20,
+    '#required' => FALSE,
+    '#size' => 20,
+    '#weight' => 3.5,
+    );
+  }
+
+  $tw = isset($namen[$start['tweede']]) ? $start['tweede'] : 'Onbekend';
+  $form['tweede'] = array(
+  '#title' => t('Tweede'),
+  '#type' => 'select',
+  '#options' => $namen,
+  '#default_value' => $tw,
+  '#description' => t('2e inzittende'),
+  '#maxlength' => 20,
+  '#required' => FALSE,
+  '#size' => 1,
+  '#weight' => 4,
+  );
+
+  if (!isset($form_state['values']['tweede']) || $form_state['values']['tweede'] == 'Onbekend') {
+    $form['nav_onbekend'] = array(
+    '#title' => t('Tweede (indien onbekend)'),
+    '#type' => 'textfield',
+    '#default_value' => $start['tweede'],
+    //'#description' => t('2e inzittende'),
+    '#maxlength' => 20,
+    '#required' => FALSE,
+    '#size' => 20,
+    '#weight' => 4.5,
+    );
+  }
+
+  $form['start'] = array(
+  '#title' => t('Start'),
+  '#type' => 'textfield',
+  '#default_value' => substr($start['start'], 0, 5),
+  '#description' => t('Tijd start'),
+  '#maxlength' => 5,
+  '#required' => TRUE,
+  '#size' => 5,
+  '#weight' => 5,
+  );
+  $form['landing'] = array(
+  '#title' => t('Landing'),
+  '#type' => 'textfield',
+  '#default_value' => substr($start['landing'], 0, 5),
+  '#description' => t('Tijd landing'),
+  '#maxlength' => 5,
+  '#required' => TRUE,
+  '#size' => 5,
+  '#weight' => 6,
+  );
+  $form['duur'] = array(
+  '#title' => t('Duur'),
+  '#type' => 'hidden',
+  '#default_value' => substr($start['duur'], 0, 5),
+  '#description' => t('Vluchtduur'),
+  '#maxlength' => 5,
+  '#required' => FALSE,
+  '#size' => 5,
+  '#weight' => 7,
+  ); 
+  $form['soort'] = array(
+  '#title' => t('Soort'),
+  '#type' => 'select',
+  '#default_value' => $start['soort'],
+  '#options' => $soorten,
+  '#description' => t('Soort vlucht'),
+  '#weight' => 8,
+  );
+  $form['startmethode'] = array(
+  '#title' => t('Startmethode'),
+  '#type' => 'select',
+  '#description' => t('L, S of M'),
+  '#options' => $methodes,
+  '#default_value' => $start['startmethode'],
+  '#weight' => 9,
+  );
+  $form['instructie'] = array(
+  '#title' => t('Instructie'),
+  '#type' => 'select',
+  '#options' => $JaNee,
+  '#default_value' => $start['instructie'],
+  '#description' => t('Instructie vlucht'),
+  '#weight' => 10,
+  );
+  $form['opmerking'] = array(
+  '#title' => t('Opmerking'),
+  '#type' => 'textfield',
+  '#default_value' => $start['opmerking'],
+  '#description' => t('Opmerking'),
+  '#maxlength' => 30,
+  '#required' => FALSE,
+  '#size' => 30,
+  '#weight' => 11,
+  );
+  
+  $form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('Opslaan'),
+  '#weight' => 13,
+  );
+
+  $eigen_start = (($start['gezagvoerder'] == $afkorting) || ($start['tweede'] == $afkorting));
+  if ((!$new) && ($may_edit || $eigen_start)){
+    $form['verwijderen'] = array(
+    '#title' => t('Verwijder deze vlucht'),
+    '#type' => 'checkbox',
+    '#default_value' => 0,
+    '#description' => t('Ik wil deze vlucht verwijderen'),
+    '#required' => FALSE,
+    '#weight' => 12,
+    );
+    $form['delete'] = array(
+    '#type' => 'submit',
+    '#value' => t('Verwijderen'),
+    '#weight' => 14,
+    );
+  }
+  return $form;
+}
+
+/**
+ * Selects the piece of the form we want to use as replacement text and returns
+ * it as a form (renderable array).
+ *
+ * @return renderable array (the textfields element)
+ */
+function ezacstart_form_registratie_callback($form, $form_state) {
+  return $form['registratie'];
+}
+
+
+/**
+* Validate the form.
+*/
+function ezacstart_form_validate($form, &$form_state) {
+  if (!isset($form_state['values'])) return;
+
+  //datum
+  $dc = explode('-', $form_state['values']['datum']);
+  if (!checkdate($dc[1], $dc[2], $dc[0])) form_set_error('datum', 'ongeldige datum');
+
+  //registratie
+  if (isset($form_state['values']['reg_onbekend'])) {
+    if (($form_state['values']['reg'] == 'Onbekend') && ($form_state['values']['reg_onbekend'] == '')) {
+      form_set_error('reg_onbekend', 'Registratie ontbreekt');
+    }
+  }
+
+  //gezagvoerder
+  if (isset($form_state['values']['pic_onbekend'])) {
+    if (($form_state['values']['gezagvoerder'] == 'Onbekend') && ($form_state['values']['pic_onbekend'] == '')) {
+      form_set_error('pic_onbekend', 'Gezagvoerder niet ingevuld');
+    }
+  }
+  //tweede
+
+  //start
+  if ($form_state['values']['start'] <> '') {
+    $stc = explode(':', $form_state['values']['start']);
+    if (!is_numeric($stc[0]) || ($stc[0] < 0) || ($stc[0] > 23)) form_set_error('start', 'ongeldige tijd');
+    if (!is_numeric($stc[1]) || ($stc[1] < 0) || ($stc[1] > 59)) form_set_error('start', 'ongeldige tijd');
+  }
+  //landing
+  if ($form_state['values']['landing'] <> '') {
+    $ltc = explode(':', $form_state['values']['landing']);
+    if (!is_numeric($ltc[0]) || ($ltc[0] < 0) || ($ltc[0] > 23)) form_set_error('landing', 'ongeldige tijd');
+    if (!is_numeric($ltc[1]) || ($ltc[1] < 0) || ($ltc[1] > 59)) form_set_error('landing', 'ongeldige tijd');
+    
+    if (strtotime($form_state['values']['landing']) < strtotime($form_state['values']['start'])) {
+      form_set_error('landing', 'landing eerder dan start tijd');
+    }
+  }
+  //soort
+  //startmethode
+  //instructie
+  //opmerking
+  
+  //confirm delete bij op == Verwijderen
+  if (isset($form_state['values']['op'])) {
+    if (($form_state['values']['op'] == 'Verwijderen') && ($form_state['values']['verwijderen'] == 0)) {
+      form_set_error('verwijderen', 'Selecteer Verwijderen én druk op de knop Verwijderen om deze vlucht te ...');
+      return;
+    }
+  }
+}
+
+/**
+* Handle post-validation form submission.
+*/
+function ezacstart_form_submit($form, &$form_state) {
+  global $namen;
+  global $kisten;
+  global $soorten;
+  global $methodes;
+  global $JaNee;
+  global $current_url;
+  
+  $new = $form_state['values']['new'];
+  $id = $form_state['values']['id'];
+  $datum = $form_state['values']['datum'];
+  $registratie = ($form_state['values']['reg'] <> 'Onbekend')
+    ? $form_state['values']['reg']
+    : $form_state['values']['reg_onbekend'];
+  $gezagvoerder = ($form_state['values']['gezagvoerder'] <> 'Onbekend')
+    ? $form_state['values']['gezagvoerder']
+    : $form_state['values']['pic_onbekend'];
+  $tweede = ($form_state['values']['tweede'] <> 'Onbekend')
+    ? $form_state['values']['tweede']
+    : $form_state['values']['nav_onbekend'];
+  $soort = $form_state['values']['soort'];
+  $startmethode = $form_state['values']['startmethode'];
+  $start = $form_state['values']['start'];
+  $landing = $form_state['values']['landing'];
+  $duur = $form_state['values']['duur'];
+  $instructie = $form_state['values']['instructie'];
+  $opmerking = $form_state['values']['opmerking'];
+  $op = $form_state['values']['op'];
+
+  //build REST resource request
+  //@TODO add Oauth hash value 
+  $resource = EZAC_ENDPOINT .'starts';
+
+  /*  switched off
+  $data = '?datum=' .urlencode($datum) .'&registratie=' .urlencode($registratie) .'&gezagvoerder=' .urlencode($gezagvoerder);
+  $data .= '&tweede=' .urlencode($tweede) .'&soort=' .urlencode($soort) .'&startmethode=' .urlencode($startmethode);
+  $data .= '&start=' .urlencode($start) .'&landing=' .urlencode($landing) .'&duur=' .urlencode($duur);
+  $data .= '&instructie=' .urlencode($instructie);
+  $data .= '&opmerking=' .urlencode($opmerking);
+  
+  */
+  $params = array(
+    'datum' => $datum,
+    'registratie' => $registratie,
+    'gezagvoerder' => $gezagvoerder,
+    'tweede' => $tweede,
+    'soort' => $soort,
+    'startmethode' => $startmethode,
+    'start' => $start,
+    'landing' => $landing,
+    'duur' => $duur,
+    'instructie' => $instructie,
+    'opmerking' => $opmerking,
+  );
+  
+  //drupal_set_message($resource); //debug
+  $options['headers'] = array(
+  //'Content-Type' => 'application/json',
+    'charset'=> 'UTF-8',
+    'Connection'=> 'Keep-Alive',
+    );
+
+  if ($new) {
+    //POST record  
+    $params = array(
+      'datum' => $datum,
+      'registratie' => $registratie,
+      'gezagvoerder' => $gezagvoerder,
+      'tweede' => $tweede,
+      'soort' => $soort,
+      'startmethode' => $startmethode,
+      'start' => $start,
+      'landing' => $landing,
+      'duur' => $duur,
+      'instructie' => $instructie,
+      'opmerking' => $opmerking,
+    );
+    $options['method'] = 'POST';
+    //$resource .= $data; //replaced by $params
+  }
+  else {
+    if ($op == 'Verwijderen') {
+      // DELETE record
+      $resource .= "/$id";
+      $options['method'] = 'DELETE';
+	$params = array(
+	  'datum' => $datum,
+	);
+    }
+    else {
+      //update record (PUT)
+      $options['method'] = 'PUT';
+      if (isset($id)) {
+	$resource .= "/$id.json";
+	//$resource .= $data; //replaced by $params
+	$params = array(
+	  'datum' => $datum,
+	  'registratie' => $registratie,
+	  'gezagvoerder' => $gezagvoerder,
+	  'tweede' => $tweede,
+	  'soort' => $soort,
+	  'startmethode' => $startmethode,
+	  'start' => $start,
+	  'landing' => $landing,
+	  'duur' => $duur,
+	  'instructie' => $instructie,
+	  'opmerking' => $opmerking,
+	);
+      }
+      else {
+	drupal_set_message("update error - no id", 'error');
+	return;
+      }
+    }
+  }
+  
+  // send REST resource request
+  //$result = drupal_http_request($resource, $options);
+  $result = oAuthRequest($resource, $options['method'], $params);
+ 
+  /* // not applicable with curl
+  if ($result->status_message <>  'OK') { //error
+    drupal_set_message('error ' .$result->code .' - ' .$result->error, 'error');
+    return; 
+  }
+  */
+  if ($result = null) {
+    return; //error
+  }
+  // return result
+  $message = ($new) ? 'Start is aangemaakt' : 'Start is bijgewerkt' ;
+  if ($op == 'Verwijderen') $message = "Start $id op datum $datum is verwijderd";
+  drupal_set_message($message);
+  
+  //redirect naar calling url
+  if ($current_url != "") {
+    $form_state['redirect'] = $current_url;
+  }
+  else $form_state['redirect'] = 'startlijst';
+  return;
+}
+
+/**
+ *Browse starts record
+ *@param string $datum
+ *@param string $afkorting
+ */
+function _ezacstart_browse($datum, $afkorting) {
+  if ($afkorting == '') {
+    $afkorting = null;
+    $title = 'Starts van ' .ezacstart_show_date($datum);
+  }
+  else {
+    $title = 'Jouw starts van ' .ezacstart_show_date($datum);
+  }
+  $starts = ezacstart_get_starts(null, $datum, $afkorting);
+  if ($starts == null) {
+    $starts = array();
+  }
+
+  //store current path
+  global $base_url;
+  global $current_url;
+  $current_url = "$base_url/startlijst/browse/$datum";
+  if ($afkorting) $current_url .= "/$afkorting";
+
+  return ezacstart_display($title, $starts);
+}
+
+/**
+ *Display selected startlijst view
+ *@param string $title
+ *@param array $starts
+ *@returns array themeable output
+ */
+function ezacstart_display($title, array $starts) {
+  // turn cache off
+  drupal_add_http_header('Cache-control', 'no-cache');
+  drupal_add_http_header('Pragma', 'no-cache'); //http 1.0
+
+  //global $current_url;
+  //drupal_set_message("current url: $current_url"); //DEBUG
+  
+  // display results 
+  unset($output); //clear
+  $output[0]['#type'] = 'markup';
+  $output[0]['#markup'] = "<p><h1>$title</h1></p>";
+  $output[0]['#weight'] = 0;
+  
+  // zet in de tabel
+  foreach ($starts as $start) {
+    $registratie = $start['registratie'];
+    switch ($start['startmethode']) {
+      case 'L': {
+	$soort = t('Lier');
+	break;
+      }
+      case 'M': {
+	$soort = t('Motor');
+	break;
+      }
+      case 'S': {
+	$soort = t('Sleep');
+	break;
+      }
+    }
+    $sm = $soort;
+    $soort .= ' ' .$start['soort'];
+    //tel starts per startmethode
+    $startmethode[$sm]['aantal'] =
+      (isset($startmethode[$sm]['aantal'])) 
+      ? $startmethode[$sm]['aantal'] + 1
+      : 1;
+    
+    //check edit permission
+    $may_edit = user_access('ezac_start_edit');
+    $user_afkorting = ezacstart_get_afkorting();
+    $eigen_start = (($start['gezagvoerder'] == $user_afkorting) || ($start['tweede'] == $user_afkorting));
+    if ($may_edit || $eigen_start){
+      //link to edit function
+      $datum_link = '<a href=' .base_path() .'startlijst/edit/' .$start['id'] .'>' .$start['datum'] .'</a>';
+    }
+    else $datum_link = $start['datum'];
+    
+    $row[] = array(
+      $datum_link,
+      $registratie,
+      ezacstart_find_name($start['gezagvoerder']), 
+      ezacstart_find_name($start['tweede']), 
+      substr($start['start'],0,5),   //strip seconds
+      substr($start['landing'],0,5), //strip seconds
+      substr($start['duur'],0,5),    //strip seconds
+      $soort,
+      ($start['instructie'] == 0) ? '' : 'Ja',
+      $start['opmerking'],
+    );
+    
+    $duur_hhmm = explode(':', $start['duur']);
+    $duur_minuten = $duur_hhmm[0] * 60 + $duur_hhmm[1];
+    
+    $kist[$registratie] = array(
+      'aantal' =>
+      (isset($kist[$registratie]['aantal']))
+        ? $kist[$registratie]['aantal'] + 1
+	: 1,//increase number of starts for kist
+      'duur'   =>
+      (isset($kist[$registratie]['duur']))
+        ? $kist[$registratie]['duur']+ $duur_minuten
+        : $duur_minuten,
+     );
+  }
+  //drupal_set_message(var_dump($kist)); //DEBUG
+
+  // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+    'width'	  => '90%');
+
+  //Set up the table Headings
+  $header = array(
+    array('data' => t('datum')),
+    array('data' => t('kist')),
+    array('data' => t('gezag')),
+    array('data' => t('2e')),
+    array('data' => t('start')),
+    array('data' => t('landing')),
+    array('data' => t('duur')),
+    array('data' => t('soort')),
+    array('data' => t('instructie')),
+    array('data' => t('opmerking')),
+  );
+  
+  $output[1]['#theme'] = 'table';
+  $output[1]['#attributes'] = $attributes;
+  $output[1]['#header'] = $header;
+  if (isset($row)) $output[1]['#rows'] = $row;
+  $output[1]['#empty'] = t('Geen gegevens beschikbaar');
+  $output[1]['#weight'] = 3;
+  
+  //toon totalen per kist
+    //Set up the table Headings
+  
+  $header2 = array(
+    //array('data' => t('datum')),
+    array('data' => t('kist')),
+    array('data' => t('aantal')),
+    array('data' => t('duur')),
+  );
+
+  if (isset($kist)) {
+    $total_count = 0;
+    $total_time = 0;
+    $outputat = '%02u:%02u';
+    foreach ($kist as $registratie => $value) {
+      $hours = intval($value['duur'] / 60);
+      $minutes = $value['duur'] - ($hours * 60);
+      $row2[] = array(
+	$registratie,
+	$value['aantal'],
+	sprintf($outputat, $hours, $minutes),
+      );
+      $total_count = $total_count + $value['aantal'];
+      $total_time = $total_time + $value['duur'];
+    }
+    $hours = intval($total_time / 60);
+    $minutes = $total_time - ($hours * 60);
+    $row2[] = array ( //provide totals line
+      t('Totaal'),
+      $total_count,
+      sprintf($outputat, $hours, $minutes),
+    );
+    $output[2]['#theme'] = 'table';
+    $output[2]['#attributes'] = $attributes;
+    $output[2]['#header'] = $header2;
+    if (isset($row2)) $output[2]['#rows'] = $row2;
+    $output[2]['#empty'] = t('Geen gegevens beschikbaar');
+    $output[2]['#weight'] = 4;
+    }
+    
+  //show starts per startmethode  
+  $header3 = array(
+    //array('data' => t('datum')),
+    array('data' => t('soort')),
+    array('data' => t('aantal')),
+  );
+
+  if (isset($startmethode)) {
+    $total_count = 0;
+    foreach ($startmethode as $soort => $value) {
+      $row3[] = array(
+	$soort,
+	$value['aantal'],
+     );
+      $total_count = $total_count + $value['aantal'];
+    }
+    $row3[] = array ( //provide totals line
+      t('Totaal'),
+      $total_count,
+    );
+    $output[3]['#theme'] = 'table';
+    $output[3]['#attributes'] = $attributes;
+    $output[3]['#header'] = $header3;
+    if (isset($row3)) $output[3]['#rows'] = $row3;
+    $output[3]['#empty'] = t('Geen gegevens beschikbaar');
+    $output[3]['#weight'] = 5;
+    }
+
+  return $output;  
+}
+
+/**
+* overview of the ezac startlijst (vliegdagen)
+* @param string $datum optional
+* @returns array themeable output for starts index for current user
+*/
+function _ezacstart_overzicht($datum) {
+  if (isset($datum)) {
+    $jaar_default = substr($datum, 0, 4);
+  }
+  
+  //store current path
+  global $base_url;
+  global $current_url;
+  $current_url = "$base_url/startlijst/overzicht/$datum";
+
+  return drupal_get_form('ezacstart_overzicht_form');
+}
+
+/**
+ *select Jaar in form
+ *show starts for user in jaar (vliegdagen)
+ */
+function ezacstart_overzicht_form($form, &$form_state) {
+  global $jaar_default;
+  //get afkorting for current user
+  $afkorting = ezacstart_get_afkorting();
+  
+  // find starts for user in current month
+  // TODO sanitize $datum
+  if (!isset($datum)) {
+    $datum = $jaar_default;
+  }
+  $starts = ezacstart_get_starts_index($jaar_default, $afkorting);
+  $title = 'Jouw vliegdagen voor ' .ezacstart_show_date($jaar_default);
+  
+  //display results
+  unset($output); //clear
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = "<p><h1>$title</h1></p>";
+  $form[0]['#weight'] = 0;
+  
+  // zet in de tabel
+  if (isset($starts)) {
+    $totaal = 0;
+    foreach ($starts as $datum => $value) {
+      $row[] = array(
+	'<a href=' .base_path() .'startlijst/browse/' .$datum .'/' .$afkorting .'>' .$datum .'</a>', //link to browse function
+	$value, // aantal starts die dag
+      );
+      $totaal = $totaal + $value;
+    }
+    $row[] = array(
+      'Totaal',
+      $totaal,
+    );
+  }
+  // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+    'width'	  => '90%'
+    );
+
+  //Set up the table Headings
+  $header = array(
+    array('data' => t('datum')),
+    array('data' => t('aantal starts')),
+  );
+  
+  $form[1]['#theme'] = 'table';
+  $form[1]['#attributes'] = $attributes;
+  $form[1]['#header'] = $header;
+  if (isset($row)) $form[1]['#rows'] = $row;
+  $form[1]['#empty'] = t('Geen gegevens beschikbaar');
+  $form[1]['#weight'] = 3;
+  
+  $form['intro'] = array(
+  '#type'   => 'markup',
+  '#markup' => '<h2>Selecteer jaar voor overzicht</h2>',
+  '#weight' => 4,
+  );
+  $form['jaar'] = array(
+  '#title' => t('Jaar'),
+  '#type' => 'textfield',
+  '#default_value' => $jaar_default,
+  '#description' => t('Jaar YYYY'),
+  '#maxlength' => 4,
+  '#required' => TRUE,
+  '#size' => 4,
+  '#weight' => 5,
+  );
+
+  $form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('selecteer'),
+  '#weight' => 12,
+  );
+  
+  return $form;
+
+} //ezacstart_overzicht
+
+function ezacstart_overzicht_form_validate($form, &$form_state) {
+  global $jaar_default;
+  $jaar_default = $form_state['values']['jaar'];
+  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+}
+function ezacstart_overzicht_form_submit($form, &$form_state) {
+  // empty
+}
+
+/**
+ * starts vandaag voor iedereen
+ **/
+function _ezacstart_vandaag() {
+  //store current path
+  global $base_url;
+  global $current_url;
+  $current_url = "$base_url/startlijst/vandaag";
+
+  return drupal_get_form('ezacstart_dag_form');
+}
+
+function ezacstart_dag_form($form, &$form_state) {
+  global $datum_default;
+  // select today
+  $datum = $datum_default; //YYYY-MM-DD
+  $starts = ezacstart_get_starts(null, $datum, null);
+
+  //display results
+  if (isset($starts)) {
+    $display_datum = ezacstart_show_date($datum);
+    $output = ezacstart_display("Starts op $display_datum", $starts);
+  }
+  $form = ezacstart_form_datum($form, $form_state, $datum);
+  if (isset($output)) {
+    return array_merge($output, $form);
+  }
+  else return $form;
+}
+
+function ezacstart_dag_form_validate($form, &$form_state) {
+  global $jaar_default;
+  global $maand_default;
+  global $datum_default;
+  $jaar_default = $form_state['values']['jaar'];
+  if (isset($form_state['values']['maand'])) {
+    $maand_default = $jaar_default .'-' .sprintf('%02u', intval($form_state['values']['maand']) + 1);
+  }
+  if (isset($form_state['values']['dag'])) {
+    $datum_default = $maand_default .'-' .sprintf('%02u', $form_state['values']['dag']);
+  }
+  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+  ezacstart_form_datum_validate($form, $form_state); //chain datum validation routine
+}
+
+function ezacstart_dag_form_submit($form, &$form_state) {
+  //empty
+}
+
+/**
+ * starts voor brevet verlenging 12
+ * display starts per methode en aantal instructie dagen
+ * @param string $datum optional
+ **/
+function _ezacstart_brevet($datum) {
+  if ($datum == '') {
+    $datum = date('Y-m-d'); //today as default
+  }
+  
+  //store current path
+  global $base_url;
+  global $current_url;
+  $current_url = "$base_url/startlijst/brevet/$datum";
+  
+  return drupal_get_form('ezacstart_brevet_form', $datum);
+}
+
+function ezacstart_brevet_form($form, &$form_state, $datum) {
+  // find ezac_Leden Afkorting for logged-in user
+  global $user;
+  global $jaar_default;
+  $name = $user->name;
+  $query = db_select('ezac_Leden', 'l');
+  $query->fields('l',array('afkorting'));
+  $query->condition('l.User', $name, '=');
+  $afkorting = $query->execute()->fetchField();
+
+  // @TODO sanitize $datum
+  // select current year as default
+  if ($datum <> '') $datum_default = $datum;
+  
+  // @TODO build date range 12 months
+  $datum_delen = explode('-', $datum);
+  $datum_rest = '';
+  if (isset($datum_delen[1])) $datum_rest .= '-' .$datum_delen[1]; // add month
+  if (isset($datum_delen[2])) $datum_rest .= '-' .$datum_delen[2]; // add day
+  $datum_van = $datum_delen[0] - 1 .$datum_rest; //one year earlier
+  // @TODO check for leap year exceptions
+  $datum_tot = $datum_delen[0] .$datum_rest;
+  $datum_range = $datum_van .':' .$datum_tot;
+  $starts = ezacstart_get_starts(null, $datum_range, $afkorting);
+  //display results
+  if (isset($starts)) {
+    $display_datum = ezacstart_show_date($datum);
+    $output = ezacstart_display("Jouw starts voor de afgelopen 12 maanden tot $display_datum", $starts);
+  }
+  $form = ezacstart_form_datum($form, $form_state, $datum);
+  if (isset($output)) {
+    return array_merge($output, $form);
+  }
+  else return $form;
+
+}
+
+function ezacstart_brevet_form_validate($form, &$form_state) {
+  global $jaar_default;
+  global $maand_default;
+  global $datum_default;
+  $jaar_default = $form_state['values']['jaar'];
+  if (isset($form_state['values']['maand'])) {
+    $maand_default = $jaar_default .'-' .sprintf('%02u', intval($form_state['values']['maand']) + 1);
+  }
+  if (isset($form_state['values']['dag'])) {
+    $datum_default = $maand_default .'-' .sprintf('%02u', $form_state['values']['dag']);
+  }
+//  drupal_set_message('Datum ' .$datum_default); //debug
+  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+  ezacstart_form_datum_validate($form, $form_state); //chain datum validation routine
+}
+
+function ezacstart_brevet_form_submit($form, &$form_state) {
+  //empty
+}
+
+/**
+* Index starts records
+* @param string $datumStart timestamp
+*       lower boundary
+* @param string $datumEnd timestamp
+*       higher boundary
+* @return array
+*       index list of ezac_Starts records within Datum boundaries
+*/
+function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
+  // Compose query
+  $query = db_select('ezac_Starts', 's');
+  $query->fields('s', array('id', 'datum', 'duur')); //SELECT * from ezac_starts
+  $query->condition('s.datum', array($datumStart, $datumEnd), 'BETWEEN');
+  if (isset($naam)) {
+    $query->condition(db_or()->condition('s.gezagvoerder', $naam, '=')
+                             ->condition('s.tweede', $naam, '=')); //$gezagvoerder = $naam OR $Tweede = $naam
+  }
+  if (isset($registratie)) {
+    $query->condition('s.registratie', $registratie, '=');
+  }
+  $query->orderBy('s.datum', 'ASC');
+  $query->orderBy('s.start', 'ASC');
+
+  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+
+  foreach ($items as $item) {
+    $datum = substr($item->datum,0,10);
+    $duur  = substr($item->duur,0,5); //strip seconds
+    $duur_hhmm = explode(':', $duur);
+    $duur_minuten = $duur_hhmm[0] * 60 + $duur_hhmm[1];
+    
+    //dpm($item, '$item'); //debug
+    //dpm($duur, '$duur'); //debug
+
+    if (!isset($index[$datum])) {
+        $index[$datum]['aantal'] = 1;
+	$index[$datum]['duur'] = $duur_minuten;
+    }
+    else {
+        $index[$datum]['aantal']++; // increment value for each record
+	$index[$datum]['duur'] += $duur_minuten;
+    }
+  }
+  //dpm($index, '$index'); //debug
+  if (isset($index)) return $index;
+  else return;
+}
+
+
+/**
+* overview of the ezac startlijst (vliegdagen)
+* @param string $datum optional
+* @returns array themeable output for starts index for current user
+*/
+function _ezacstart_report($datum) {
+  if (isset($datum)) {
+    $jaar_default = substr($datum, 0, 4);
+  }
+  
+  //store current path
+  global $base_url;
+  global $current_url;
+  $current_url = "$base_url/startlijst/rapport/$datum";
+
+  return drupal_get_form('ezacstart_report_form');
+}
+/**
+ *select Jaar in form
+ *show starts for user in jaar (vliegdagen)
+ */
+function ezacstart_report_form($form, &$form_state) {
+  global $jaar_default;
+  //get afkorting for current user
+  //$afkorting = ezacstart_get_afkorting();
+  // find starts for user in current month
+  // TODO sanitize $datum
+  if (!isset($datum)) {
+    $datum = $jaar_default;
+  }
+  //$starts = ezacstart_get_starts_index($jaar_default, $afkorting);
+
+  $title = 'Vliegdagen overzicht';
+  //display results
+  unset($output); //clear
+  $form[0]['#type'] = 'markup';
+  $form[0]['#markup'] = "<p><h1>$title</h1></p>";
+  $form[0]['#weight'] = 0;
+
+  //loop for all VL
+  $leden = db_select('ezac_Leden', 'l')
+  ->fields('l', array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'))
+  ->condition('l.code', 'VL', '=')
+  ->condition('l.actief', true, '=')
+  ->orderBy('l.achternaam', 'ASC')
+  ->orderBy('l.voornaam', 'ASC')
+  ->execute()
+  ->fetchAll();
+  
+  foreach ($leden as $lid) {
+    $naam = sprintf("%s %s %s", $lid->voornaam, $lid->voorvoeg, $lid->achternaam);
+    //$dagen = ezacstart_get_starts_index($datum, $lid->afkorting);
+    $dagen = ezacstart_index_starts_by_date("$datum-01-01", "$datum-12-31", $lid->afkorting);
+    if (isset($dagen)) {
+      $totaal = 0;
+      $aantal_dagen = 0;
+      $duur = 0;
+      foreach ($dagen as $dag => $aantal) { //Hier veranderen naar array van aantal en duur
+	$totaal += $aantal[aantal];
+	$duur += $aantal[duur];
+	$aantal_dagen += 1;
+      }
+      $hours = intval($duur / 60);
+      $minutes = $duur - ($hours * 60);
+
+      $row[] = array(
+	'<a href=' .base_path() .'startlijst/browse/' .$datum .'/' .$lid->afkorting .'>' .$naam .'</a>',
+	$aantal_dagen,
+	$dag,
+	$totaal,
+        sprintf('%02u:%02u', $hours, $minutes),
+      );
+    }
+  }
+
+  // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+    'width'	  => '90%'
+    );
+
+  //Set up the table Headings
+  $header = array(
+    array('data' => t('naam')),
+    array('data' => t('aantal<br>vliegdagen')),
+    array('data' => t('laatste dag')),
+    array('data' => t('totaal<br>aantal starts')),
+    array('data' => t('totaal<br>duur')),
+  );
+  
+  $form[1]['#theme'] = 'table';
+  $form[1]['#attributes'] = $attributes;
+  $form[1]['#header'] = $header;
+  if (isset($row)) $form[1]['#rows'] = $row;
+  $form[1]['#empty'] = t('Geen gegevens beschikbaar');
+  $form[1]['#weight'] = 3;
+  
+  $form['intro'] = array(
+  '#type'   => 'markup',
+  '#markup' => '<h2>Selecteer jaar voor overzicht</h2>',
+  '#weight' => 4,
+  );
+  $form['jaar'] = array(
+  '#title' => t('Jaar'),
+  '#type' => 'textfield',
+  '#default_value' => $jaar_default,
+  '#description' => t('Jaar YYYY'),
+  '#maxlength' => 4,
+  '#required' => TRUE,
+  '#size' => 4,
+  '#weight' => 5,
+  );
+
+  $form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('selecteer'),
+  '#weight' => 12,
+  );
+  
+  return $form;
+
+} //ezacstart_overzicht
+
+function ezacstart_report_form_validate($form, &$form_state) {
+  global $jaar_default;
+  $jaar_default = $form_state['values']['jaar'];
+  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+}
+function ezacstart_report_form_submit($form, &$form_state) {
+  // empty
+}
+
+
+/**
+ * starts per dag, maand of jaar
+ * voor de ingelogde gebruiker (optioneel) of iedereen
+ * @param string $datum optional
+ * @param $user_flag indicates filter for current user (1) or all starts (0)
+ **/
+function _ezacstart_datum($datum, $user_flag) {
+  global $user;
+  global $datum_default;
+  global $maand_default;
+  global $jaar_default;
+  if ($datum == '') $datum = date('Y-m-d'); // default today
+  $datum_default = $datum;
+  $maand_default = substr($datum, 0, 7);
+  $jaar_default  = substr($datum, 0, 4);
+  
+  if ($user_flag <> 0) {
+    $name = $user->name;
+    $query = db_select('ezac_Leden', 'l');
+    $query->fields('l',array('afkorting'));
+    $query->condition('l.User', $name, '=');
+    $afkorting = $query->execute()->fetchField();
+  }
+  else $afkorting = null;
+
+  //store current path
+  global $base_url;
+  global $current_url;
+  $current_url = "$base_url/startlijst/dag/$datum";
+  if ($afkorting) $current_url .= "/$afkorting";
+  
+  return drupal_get_form('ezacstart_datum_form', $afkorting);
+}
+
+function ezacstart_datum_form($form, &$form_state, $afkorting) {
+  // find ezac_Leden Afkorting for logged-in user
+  global $jaar_default;
+  global $maand_default;
+  global $datum_default;
+  // @TODO sanitize $datum
+  
+  $starts = ezacstart_get_starts(null, $datum_default, $afkorting); 
+  //display results
+  if (isset($starts)) {
+    $title = ($afkorting <> null)? 'Jouw starts voor ' : 'Alle starts voor ';
+    $datum_label = ezacstart_show_date($datum_default);
+    $output = ezacstart_display("$title $datum_label", $starts);
+  }
+  $form = ezacstart_form_datum($form, $form_state, $datum_default);
+  if (isset($output)) {
+    return array_merge($output, $form);
+  }
+  else return $form;
+}
+
+function ezacstart_datum_form_validate($form, &$form_state) {
+  global $jaar_default;
+  global $maand_default;
+  global $datum_default;
+  $jaar_default = $form_state['values']['jaar'];
+  $datum_default = $jaar_default;
+  $maand_default = $jaar_default;
+  if (isset($form_state['values']['maand'])) {
+    $maand_default = $jaar_default .'-' .sprintf('%02u', intval($form_state['values']['maand']) + 1);
+    $datum_default = $maand_default;
+  }
+  if (isset($form_state['values']['dag'])) {
+    $datum_default = $maand_default .'-' .sprintf('%02u', $form_state['values']['dag']);
+  }
+  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+  ezacstart_form_datum_validate($form, $form_state); //chain datum validation routine
+}
+
+function ezacstart_datum_form_submit($form, &$form_state) {
+  //empty
+}
+
+/**
+ *form for datum selection
+ **/
+function ezacstart_form_datum($form, &$form_state, $datum) {
+  //TODO use date picker?
+  //drupal_set_message('form datum ' .$datum); //debug
+  
+  if ($datum == '') $datum = date('Y-m-d'); //default today
+
+  $datum_delen = explode('-', $datum);
+  $jaar  = $datum_delen[0];
+  if (isset($datum_delen[1])) $maand = $datum_delen[1];
+  if (isset($datum_delen[2])) $dag   = $datum_delen[2];
+
+  $maanden = array(
+    'januari',
+    'februari',
+    'maart',
+    'april',
+    'mei',
+    'juni',
+    'juli',
+    'augustus',
+    'september',
+    'oktober',
+    'november',
+    'december',
+  );
+  $form['intro'] = array(
+    '#type'   => 'markup',
+    '#markup' => '<h2>Selecteer datum</h2>',
+    '#weight' => 10,
+  );
+  $form['jaar'] = array(
+  '#title' => t('Jaar'),
+  '#type' => 'textfield',
+  '#default_value' => $jaar,
+  '#description' => t('Jaar YYYY'),
+  '#maxlength' => 4,
+  '#required' => TRUE,
+  '#size' => 4,
+  '#weight' => 11,
+  );
+  if (isset($maand)) {
+    $form['maand'] = array(
+    '#title' => t('Maand'),
+    '#type' => 'select',
+    '#options' => $maanden,
+    '#default_value' => intval($maand) -1,
+    '#description' => t('Maand'),
+    '#maxlength' => 2,
+    '#required' => TRUE,
+    '#size' => 2,
+    '#weight' => 12,
+    );
+  }
+  if (isset($dag)) {
+    $form['dag'] = array(
+    '#title' => t('Dag'),
+    '#type' => 'textfield',
+    '#default_value' => $dag,
+    '#description' => t('Dag'),
+    '#maxlength' => 2,
+    '#required' => TRUE,
+    '#size' => 2,
+    '#weight' => 13,
+    );
+  }
+  $form['submit'] = array(
+  '#type' => 'submit',
+  '#value' => t('selecteer datum'),
+  '#weight' => 22,
+  );
+  return $form;
+}
+
+/**
+ *form for datum selection Validate
+ **/
+function ezacstart_form_datum_validate($form, &$form_state) {
+  //TODO validate datum entry
+  //dpm($form_state); //debug
+  $jaar = intval($form_state['values']['jaar']);
+  if (!checkdate(1, 1, $jaar)) {
+    form_set_error('jaar', 'ongeldig jaar');
+  }
+  if (isset($form_state['values']['maand'])) {
+    $maand = intval($form_state['values']['maand']) + 1;
+    if (!checkdate($maand, 1, $jaar)) {
+      form_set_error('maand', 'ongeldige maand');
+    }
+  }
+  if (isset($form_state['values']['dag'])) {
+    $dag = intval($form_state['values']['dag']);
+    if (!checkdate($maand, $dag, $jaar)) {
+      form_set_error('dag', 'ongeldige dag');
+    }
+  }
+}
+
+
+/**
+ *form for datum selection Submit
+ **/
+function ezacstart_form_datum_submit($form, &$form_state) {
+  //redirect to browse/<datum>
+  $jaar_default = $form_state['values']['jaar'];
+  $maand_default = $jaar_default .'-' .sprintf('%02u', $form_state['values']['maand'] + 1);
+  $datum_default = $maand_default .'-' .sprintf('%02u', $form_state['values']['dag']);
+  //drupal_set_message($datum_default); //debug
+  $form_state['redirect'] = 'startlijst/dag/' .$datum_default;
+}
+
+/**
+ * Consume web service for starts
+ * @param int $id (optional) id of specific start record
+ * @param string $datum date range YYYY[-MM[-DD]]
+ * @param string $naam (optional) value for Gezagvoerder of Tweede
+ * @returns struct array of start records
+ * uses EZAC web service api/starts
+ **/
+function ezacstart_get_starts($id, $datum, $naam) {
+// build REST resource request
+  $resource = EZAC_ENDPOINT .'starts/';
+   if (isset($id)) {
+    $resource .= $id .'.json';
+  }
+  else {
+    $resource .= '*.json';
+    /*
+    $resource .= '?datum=' .$datum; 
+    if (isset($naam)) {
+      $resource .= '&naam=' .$naam;
+    } */
+  }
+  // GET resource data
+  $options['headers'] = array(
+    'Content-Type' => 'application/json',
+    'charset' => 'UTF-8',
+    'Connection' => 'Keep-Alive',
+    'Cache-control' => 'no-cache',
+    'Pragma' => 'no-cache', //http 1.0
+    );
+  $options['method'] = 'GET';
+  //$options['data'] = $data;
+  //$result = drupal_http_request($resource, $options); //TEMPORARY SWITCHED OFF
+ 
+ /*
+  request: A string containing the request body that was sent.
+  code: An integer containing the response status code, or the error code if an error occurred.
+  protocol: The response protocol (e.g. HTTP/1.1 or HTTP/1.0).
+  status_message: The status message from the response, if a response was received.
+  redirect_code: If redirected, an integer containing the initial response status code.
+  redirect_url: If redirected, a string containing the URL of the redirect target.
+  error: If an error occurred, the error message. Otherwise not set.
+  headers: An array containing the response headers as name/value pairs. HTTP header names are case-insensitive (RFC 2616, section 4.2), so for easy access the array keys are returned in lower case.
+  data: A string containing the response body that was received. */
+
+  // Decode json format
+
+  /* TEMPORARY SWITCHED OFF
+  if ($result->status_message <>  'OK') { //error
+    drupal_set_message('error ' .$result->code .' - ' .$result->error);
+    return; 
+  }
+  // return result
+  //dpm(drupal_json_decode($result->data), 'data'); //DEBUG
+  return drupal_json_decode($result->data);
+  */// TEMPORARY SWITCHED OFF
+  
+  // Replace code for oAuthRequest
+  $params = array();
+  $params['datum'] = $datum;
+  if (isset($naam)) $params['naam'] = $naam;
+  $result = oAuthRequest($resource, 'GET', $params);
+  return drupal_json_decode($result);
+  
+
+}
+
+/**
+ * Consume web service for starts
+ * @param string $datum date range YYYY[-MM[-DD]]
+ * @param string $naam (optional) value for Gezagvoerder of Tweede
+ * @returns array of start records
+ * uses EZAC web service api/starts
+ **/
+function ezacstart_get_starts_index($datum, $naam) {
+// build REST resource request
+  $resource = EZAC_ENDPOINT .'starts.json';
+  /*
+  $resource .= '?datum=' .$datum; 
+  if (isset($naam)) {
+    $resource .= '&naam=' .$naam;
+  }
+  
+  
+  // GET resource data
+  $options['headers'] = array(
+    'Content-Type' => 'application/json',
+    'charset'=> 'UTF-8',
+    'Connection'=> 'Keep-Alive',
+    );
+  $options['method'] = 'GET';
+  $result = drupal_http_request($resource, $options);
+ 
+  // Decode json format
+  if ($result->status_message <>  'OK') { //error
+    drupal_set_message('error ' .$result->code .' - ' .$result->error);
+    return; 
+  }
+  // return result
+
+  return drupal_json_decode($result->data);
+  */ 
+  
+  // Replace code for oAuthRequest
+  $params = array();
+  $params['datum'] = $datum;
+  if (isset($naam)) $params['naam'] = $naam;
+  $result = oAuthRequest($resource, 'GET', $params);
+  return drupal_json_decode($result);
+  
+}
+
+/**
+ * oAuth example code (adapted)
+ * @param string $req_url api endpoint url
+ * @param string $req_method POST, PUT, DELETE
+ * @param array $params parameters for request
+ */
+function oAuthRequest($req_url, $req_method, $params) {
+// @see http://oauth.googlecode.com/svn/code/php/OAuth.php
+  global $base_url;
+  //require 'OAuth.php';
+  // Establish an OAuth consumer based on consumer key and secret
+  $key ='3kvcCaWzSVmLm2jUWGDHBpJuxdPSpWdU'; // for user start on ezac.nl
+  $secret = 'e9d4zECM7P6nasogX4gryhDyT2uRZ8Vs';
+  $consumer = new OAuthConsumer($key, $secret, NULL); 
+  // Setup OAuth request
+  //$api_endpoint = 'https://www.mydrupalsite.com/my_endpoint/resource_name';
+  //$api_endpoint = "$base_url/api/starts.json";
+  $api_endpoint = $req_url;
+  //$params = array('param1' => 'value1');
+  $request = OAuthRequest::from_consumer_and_token($consumer, NULL, $req_method, $api_endpoint, $params);
+  // Sign the constructed OAuth request using HMAC-SHA1
+  $request->sign_request(new OAuthSignatureMethod_HMAC_SHA1(), $consumer, NULL);
+  // Make signed OAuth request to the API server
+  $output = array();
+  foreach($params as $key => $item) {
+    $output[] = $key . '=' . urlencode($item);
+  }
+  $url = $api_endpoint . '?' .  implode('&', $output);
+  $curl = curl_init();
+  $options = array(
+    CURLOPT_URL => $url,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FAILONERROR => false,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_HTTPHEADER => array(
+			  'Content-Type: application/json',
+			  $request->to_header()),
+  );
+  curl_setopt_array($curl, $options);
+  //switch http method
+  switch ($req_method) {
+    case 'GET':
+      curl_setopt($curl, CURLOPT_HTTPGET, true);
+      break;
+    case 'POST':
+      curl_setopt($curl, CURLOPT_POST, true);
+      //curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($params)); //passed url-encoded instead
+      break;
+    case 'PUT':
+      curl_setopt($curl, CURLOPT_PUT, true);
+      break;
+    case 'DELETE':
+      curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $req_method);
+      break;
+  }
+  $response = curl_exec($curl);
+  //dpm($req_url); //DEBUG
+  //dpm($req_method);
+  //dpm($params);
+  //dpm($response);
+  //insert error handling
+  if (!$response) {
+    //error
+    $err_txt = curl_error;
+    $err_no = curl_errno;
+    drupal_set_message("error $err_txt ($err_no) for $url", 'error');
+    return;
+  }
+  curl_close($curl);
+  return $response;
+}

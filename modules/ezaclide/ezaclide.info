@@ -1,0 +1,6 @@
+; $Id$
+name = EZAC ledenbestand
+description = Ledenbestand beheer
+version = "7.x-0.1"
+core = 7.x
+;dependencies[] = mimemail
