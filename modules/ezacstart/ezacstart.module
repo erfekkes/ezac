@@ -157,7 +157,7 @@ function ezacstart_menu() {
   $items['startlijst/browse'] = array(
       'title' => 'Inzien per dag',
       'description'=> 'Startlijst per dag',
-      'page callback' => '_ezacstart_browse',
+      'page callback' => 'ezacstart_browse',
       'page arguments' => array(2, 3, DETAILS), //datum en naam met details
       'access callback' => 'user_access',
       'access arguments' => array('ezac_start_view'),
@@ -166,7 +166,7 @@ function ezacstart_menu() {
   $items['startlijst/totals'] = array(
       'title' => 'Totalen inzien per dag',
       'description'=> 'Startlijst totalen per dag',
-      'page callback' => '_ezacstart_browse',
+      'page callback' => 'ezacstart_browse',
       'page arguments' => array(2, 3, TOTALS), //datum en naam met details
       'access callback' => 'user_access',
       'access arguments' => array('ezac_start_view'),
@@ -682,13 +682,13 @@ function ezacstart_form_submit($form, &$form_state) {
  *@param string $datum
  *@param string $afkorting
  */
-function _ezacstart_browse($datum, $afkorting, $details) {
+function ezacstart_browse($datum, $afkorting, $details) {
   if ($afkorting == '') {
     $afkorting = null;
     $title = 'Starts van ' .ezac_show_date($datum);
   }
   else {
-    $title = 'Jouw starts van ' .ezac_show_date($datum);
+    $title = 'Starts ' .ezac_get_naam($afkorting) .' van ' .ezac_show_date($datum);
   }
   $starts = ezacstart_get_starts(null, $datum, $afkorting);
   if ($starts == null) {
@@ -801,13 +801,14 @@ function ezacstart_display($title, array $starts, $details) {
   }
   //drupal_set_message(var_dump($kist)); //DEBUG
 
+  // Table tag attributes
+  $attributes = array(
+    'border'      => 1,
+    'cellspacing' => 0,
+    'cellpadding' => 5,
+    'width'	  => '90%');    
+    
   if ($details) {
-      // Table tag attributes
-      $attributes = array(
-        'border'      => 1,
-        'cellspacing' => 0,
-        'cellpadding' => 5,
-        'width'	  => '90%');
 
       //Set up the table Headings
       $header = array(

@@ -201,7 +201,8 @@ function ezaclide_new_form($form, &$form_state) {
   $lidrec['lid_van'] = date("Y-m-d");
   $lidrec['lid_eind'] = '';
   $lidrec['rtlicense'] = '';
-  $lidrec['instructie'] = '';
+  $lidrec['leerling'] = 0;
+  $lidrec['instructie'] = 0;
   $lidrec['instructeu'] = '';
   $lidrec['e_mail'] = '';
   $lidrec['camping'] = '';
@@ -773,6 +774,16 @@ function ezaclide_form_edit(&$form = NULL, &$form_state) {
   '#options' => $options_yn,
   '#weight' => 18
   );
+
+  //leerling Ja/nee 0
+  $form['leerling'] = array(
+  '#title' => t('Leerling'),
+  '#type' => 'select',
+  '#default_value' => $lidrec['leerling'],
+  '#description' => t('Leerling (Ja/nee)'),
+  '#options' => $options_yn,
+  '#weight' => 18
+  );
   //Instructie Ja/nee 1
   $form['instructie'] = array(
   '#title' => t('Instructie'),
@@ -1270,6 +1281,7 @@ function ezaclide_form_submit($form, &$form_state) {
   if ($lidvan <> "") $update .= "lid_van='" .$lidvan ."', "; 
   else $update .= "lid_van=null, ";
   $update .= "rtlicense=" .$form_state["values"]["rt"] .", ";
+  $update .= "leerling=" .$form_state["values"]["leerling"] .", ";
   $update .= "instructie=" .$form_state["values"]["instructie"] .", ";
   $update .= "e_mail='" .$form_state["values"]["e-mail"] ."', ";
   $update .= "camping=" .$form_state["values"]["camping"] .", ";

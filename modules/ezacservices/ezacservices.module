@@ -491,7 +491,7 @@ function ezacservices_find_leden_items($id, $codes, $actief) {
   $query = db_select('ezac_Leden', 'l');
   // Idea: field list could be (selectively) loaded from parameter 'fields' to enhance flexibility of the API
   $query->fields('l', array('Id', 'Voorvoeg', 'Achternaam', 'Afkorting', 'Voornaam', 'Voorletter', 'Adres', 'Postcode',
-                            'Plaats', 'Land', 'Telefoon', 'Mobiel', 'Code', 'Actief', 'Instructie', 'E_mail'));
+                            'Plaats', 'Land', 'Telefoon', 'Mobiel', 'Code', 'Actief', 'Leerling', 'Instructie', 'E_mail'));
   
   // if $id <> '*' select one record
   if ($id <> '*') {
@@ -507,6 +507,7 @@ function ezacservices_find_leden_items($id, $codes, $actief) {
   }
 
   $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+    
   return $items;
 }
 

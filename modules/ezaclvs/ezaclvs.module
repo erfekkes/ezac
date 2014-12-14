@@ -479,6 +479,13 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     : key($namen); //top value as default
     $helenaam = $namen[$vlieger_afkorting];
     
+    $datum = (isset($form_state['values']['datum']) && ($form_state['values']['datum'] <> ''))
+    ? $form_state['values']['datum']
+    : date('Y-m-d'); //today as default
+
+    //toon vluchten dit jaar
+    $form['vliegers']['starts'] = ezacstart_browse(date('Y'), $vlieger_afkorting, TOTALS);
+    
     if (!$overzicht) {
         // invoeren opmerking
         $form['vliegers']['opmerking'] = array(
@@ -627,15 +634,6 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
 }
 
 /**
-* genereer form onderdeel met huidige bevoegdheden en verslagen
-* returns array $form
-*/
-function ezaclvs_huidig() {
-
-    return $form;
-}
-
-/**
  * Selects the piece of the form we want to use as replacement text and returns
  * it as a form (renderable array).
  *
@@ -676,10 +674,32 @@ function ezaclvs_persoon_form_submit ($form, &$form_state) {
                     : '',
             ))
             ->execute();
+        
+        $status = db_select('ezac_lvs_bevoegdheden', 'b')
+            ->condition('b.bevoegdheid', $form_state['values']['bevoegdheid']['keuze'], '=')
+            ->fields('b', array('status'))
+            ->execute()->fetchField();
+
+        switch ($status)  {
+            case '0':   $num_updated = db_update('ezac_leden')
+                                     ->fields(array('leerling' => 1))
+                                     ->condition('afkorting', $form_state['values']['persoon'], '=')
+                                     ->execute();
+                        break;
+            case '1':   $num_updated = db_update('ezac_leden')
+                                     ->fields(array('leerling' => 0))
+                                     ->condition('afkorting', $form_state['values']['persoon'], '=')
+                                     ->execute();
+                        break;
+            case '2':   $num_updated = db_update('ezac_leden')
+                                     ->fields(array('instructie' => 1))
+                                     ->condition('afkorting', $form_state['values']['persoon'], '=')
+                                     ->execute();
+                        break;
+        }
         drupal_set_message('Bevoegdheid aangemaakt', 'status');
-    
     }
-    //dpm($form_state, 'form_state submit'); //debug
+
     return;
 }
 
