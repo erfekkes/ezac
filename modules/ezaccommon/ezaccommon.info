@@ -1,0 +1,7 @@
+; $Id$
+name = EZAC common functions and definitions
+description = EZAC support functies
+version = "7.x-0.1"
+core = 7.x
+dependencies[] = ezacservices
+;dependencies[] = oauth

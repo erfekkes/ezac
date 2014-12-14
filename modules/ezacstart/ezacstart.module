@@ -16,9 +16,7 @@
 * Globals
 */
   global $base_url;
-  DEFINE ('EZAC_ENDPOINT', "$base_url/api/");
-  //drupal_set_message(EZAC_ENDPOINT ." in gebruik"); //DEBUG
-  //DEFINE ('EZAC_ENDPOINT', 'http://www.ezac.nl/drupal/api/'); //production host
+  //require_once('./'. drupal_get_path('module', 'ezaccommon') .'/ezacapi.inc');
 
   DEFINE ('DETAILS', true); //for ezacstart_display
   DEFINE ('TOTALS', false);
@@ -187,103 +185,7 @@ function ezacstart_menu() {
   return $items;
 }
 
-/**
- * Helper function to show datum
- */
-function ezacstart_show_date($datum) {
-  //handle datum range
-  if (strpos($datum, ':')) { //date range given
-    $date_range = explode(':', $datum);
-    $dat_string = ezacstart_show_date($date_range[0]) .' - ' .ezacstart_show_date($date_range[1]);
-    return $dat_string;
-  }
-  $datumvalue = strtotime($datum);
-  $dat_string = '';
-  if (strlen($datum) > 7) {
-    $dat_string .= t(date('l', $datumvalue)); // dag van de week
-    $dat_string .= " " .t(date('j', $datumvalue)) ." "; // dag zonder nul
-  }
-  if (strlen($datum) > 4) {
-    $dat_string .= t(date('F', $datumvalue)) . " "; // maand volledig
-  }
-  $dat_string .= " " .t(date('Y', $datumvalue)); // jaar
-  return $dat_string;
-}
 
-/**
- * helper function to find afkorting for current user
- * @returns string $afkorting
- */
-function ezacstart_get_afkorting() {
-  // find ezac_Leden Afkorting for logged-in user
-  global $user;
-  global $user_afkorting;
-  
-  $name = $user->name;
-  $query = db_select('ezac_Leden', 'l');
-  $query->fields('l',array('afkorting'));
-  $query->condition('l.User', $name, '=');
-  $afkorting = $query->execute()->fetchField();
-  $user_afkorting = $afkorting; // store for later use
-  return $afkorting;
-}
-
-/**
- * helper function for finding a name
- * @param string $name afkorting to be found
- * @returns string naam when found else $name from input
- */
-function ezacstart_find_name($afkorting) {
-  if ($afkorting == '') return '';
-  $query = db_select('ezac_Leden', 'l');
-  $query->fields('l',array('voornaam', 'voorvoeg', 'achternaam'));
-  $query->condition('l.afkorting', $afkorting, '=');
-  $helenaam = $query->execute()->fetchassoc();
-  if (isset($helenaam)) {
-    $naam = $helenaam['voornaam'];
-    if (isset($helenaam['voorvoeg'])) $naam .= ' ' .$helenaam['voorvoeg'] ;
-    $naam .= ' ' .$helenaam['achternaam'];
-  }
-  if ($helenaam == '') {
-    $naam = $afkorting;
-  }
-  return $naam;
-}
-
-/**
- * Lees VL namen in tabel
- */
-function ezacstarts_get_namen() {
-  $query = db_select('ezac_Leden', 'l');
-  $query->fields('l',array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'));
-  $query->condition('l.code', 'VL', '=');
-  $query->condition('l.actief', '1', '=');
-  $query->orderBy('l.voornaam', 'ASC');
-  $query->orderBy('l.achternaam', 'ASC');
-  $namen = $query->execute()->fetchAll();
-  
-  foreach ($namen as $naam) {
-    $naam_tabel[$naam->afkorting] = sprintf("%s %s %s", $naam->voornaam, $naam->voorvoeg, $naam->achternaam);
-  }
-  return $naam_tabel;
-}
-
-/**
- * Lees Kisten in tabel
- */
-function ezacstarts_get_kisten() {
-  $query = db_select('ezac_Kisten', 'k');
-  $query->fields('k',array('registratie', 'inzittenden', 'prive'));
-  $query->condition('k.actief', '1', '=');
-  $query->orderBy('k.prive', 'ASC');
-  $query->orderBy('k.registratie', 'ASC');
-  $kisten = $query->execute()->fetchAll();
-  
-  foreach ($kisten as $kist) {
-    $kist_tabel[$kist->registratie] = $kist->inzittenden;
-  }
-  return $kist_tabel;
-}
 
 /**
  * Create starts record
@@ -316,7 +218,7 @@ function ezacstart_form($form = NULL, &$form_state, $start) {
   global $methodes;
   global $JaNee;
 
-  $afkorting = ezacstart_get_afkorting();
+  $afkorting = ezac_get_afkorting();
   
   //mag deze gebruiker elke start wijzigen / verwijderen?
   //zo niet, dan alleen voor eigen starts toestaan
@@ -327,11 +229,11 @@ function ezacstart_form($form = NULL, &$form_state, $start) {
   $methodes = array('L' => 'Lier', 'S' => 'Sleep', 'M' => 'Motor');
   $JaNee = array(t('Nee'),t('Ja'));
   
-  $namen = ezacstarts_get_namen();
+  $namen = ezac_get_namen();
   $namen[''] = '<leeg>';
   $namen['Onbekend'] = '<Onbekend>';
   
-  $kisten = ezacstarts_get_kisten();
+  $kisten = ezac_get_kisten();
   foreach ($kisten as $registratie => $inzittenden) {
     $kist_optie[$registratie] = "$registratie ($inzittenden)";
   }
@@ -783,10 +685,10 @@ function ezacstart_form_submit($form, &$form_state) {
 function _ezacstart_browse($datum, $afkorting, $details) {
   if ($afkorting == '') {
     $afkorting = null;
-    $title = 'Starts van ' .ezacstart_show_date($datum);
+    $title = 'Starts van ' .ezac_show_date($datum);
   }
   else {
-    $title = 'Jouw starts van ' .ezacstart_show_date($datum);
+    $title = 'Jouw starts van ' .ezac_show_date($datum);
   }
   $starts = ezacstart_get_starts(null, $datum, $afkorting);
   if ($starts == null) {
@@ -853,7 +755,7 @@ function ezacstart_display($title, array $starts, $details) {
     if ($details) {//only add details when requested
         //check edit permission
         $may_edit = user_access('ezac_start_edit');
-        $user_afkorting = ezacstart_get_afkorting();
+        $user_afkorting = ezac_get_afkorting();
         $eigen_start = (($start['gezagvoerder'] == $user_afkorting) || ($start['tweede'] == $user_afkorting));
         if ($may_edit || $eigen_start){
           //link to edit function
@@ -864,8 +766,8 @@ function ezacstart_display($title, array $starts, $details) {
         $row[] = array(
           $datum_link,
           $registratie,
-          ezacstart_find_name($start['gezagvoerder']), 
-          ezacstart_find_name($start['tweede']), 
+          ezac_get_naam($start['gezagvoerder']), 
+          ezac_get_naam($start['tweede']), 
           substr($start['start'],0,5),   //strip seconds
           substr($start['landing'],0,5), //strip seconds
           substr($start['duur'],0,5),    //strip seconds
@@ -1051,7 +953,7 @@ function _ezacstart_overzicht($datum) {
 function ezacstart_overzicht_form($form, &$form_state) {
   global $jaar_default;
   //get afkorting for current user
-  $afkorting = ezacstart_get_afkorting();
+  $afkorting = ezac_get_afkorting();
   
   // find starts for user in current month
   // TODO sanitize $datum
@@ -1059,7 +961,7 @@ function ezacstart_overzicht_form($form, &$form_state) {
     $datum = $jaar_default;
   }
   $starts = ezacstart_get_starts_index($jaar_default, $afkorting);
-  $title = 'Jouw vliegdagen voor ' .ezacstart_show_date($jaar_default);
+  $title = 'Jouw vliegdagen voor ' .ezac_show_date($jaar_default);
   
   //display results
   unset($output); //clear
@@ -1158,7 +1060,7 @@ function ezacstart_dag_form($form, &$form_state) {
 
   //display results
   if (isset($starts)) {
-    $display_datum = ezacstart_show_date($datum);
+    $display_datum = ezac_show_date($datum);
     $output = ezacstart_display("Starts op $display_datum", $starts, DETAILS);
   }
   $form = ezacstart_form_datum($form, $form_state, $datum);
@@ -1231,7 +1133,7 @@ function ezacstart_brevet_form($form, &$form_state, $datum) {
   $starts = ezacstart_get_starts(null, $datum_range, $afkorting);
   //display results
   if (isset($starts)) {
-    $display_datum = ezacstart_show_date($datum);
+    $display_datum = ezac_show_date($datum);
     $output = ezacstart_display("Jouw starts voor de afgelopen 12 maanden tot $display_datum", $starts, DETAILS);
   }
   $form = ezacstart_form_datum($form, $form_state, $datum);
@@ -1337,7 +1239,7 @@ function ezacstart_report_form($form, &$form_state) {
   global $jaar_default;
   global $download;
   //get afkorting for current user
-  //$afkorting = ezacstart_get_afkorting();
+  //$afkorting = ezac_get_afkorting();
   // find starts for user in current month
   // TODO sanitize $datum
   if (!isset($datum)) {
@@ -1568,7 +1470,7 @@ function ezacstart_datum_form($form, &$form_state, $afkorting) {
   //display results
   if (isset($starts)) {
     $title = ($afkorting <> null)? 'Jouw starts voor ' : 'Alle starts voor ';
-    $datum_label = ezacstart_show_date($datum_default);
+    $datum_label = ezac_show_date($datum_default);
     $output = ezacstart_display("$title $datum_label", $starts, DETAILS);
   }
   $form = ezacstart_form_datum($form, $form_state, $datum_default);
@@ -1723,6 +1625,7 @@ function ezacstart_form_datum_submit($form, &$form_state) {
  **/
 function ezacstart_get_starts($id, $datum, $naam) {
 // build REST resource request
+// oAuthRequest is defined in ezacapi.inc 
   $resource = EZAC_ENDPOINT .'starts/';
    if (isset($id)) {
     $resource .= $id .'.json';
@@ -1745,43 +1648,17 @@ function ezacstart_get_starts($id, $datum, $naam) {
     );
   $options['method'] = 'GET';
   //$options['data'] = $data;
-  //$result = drupal_http_request($resource, $options); //TEMPORARY SWITCHED OFF
  
- /*
-  request: A string containing the request body that was sent.
-  code: An integer containing the response status code, or the error code if an error occurred.
-  protocol: The response protocol (e.g. HTTP/1.1 or HTTP/1.0).
-  status_message: The status message from the response, if a response was received.
-  redirect_code: If redirected, an integer containing the initial response status code.
-  redirect_url: If redirected, a string containing the URL of the redirect target.
-  error: If an error occurred, the error message. Otherwise not set.
-  headers: An array containing the response headers as name/value pairs. HTTP header names are case-insensitive (RFC 2616, section 4.2), so for easy access the array keys are returned in lower case.
-  data: A string containing the response body that was received. */
-
-  // Decode json format
-
-  /* TEMPORARY SWITCHED OFF
-  if ($result->status_message <>  'OK') { //error
-    drupal_set_message('error ' .$result->code .' - ' .$result->error);
-    return; 
-  }
-  // return result
-  //dpm(drupal_json_decode($result->data), 'data'); //DEBUG
-  return drupal_json_decode($result->data);
-  */// TEMPORARY SWITCHED OFF
-  
   // Replace code for oAuthRequest
   $params = array();
   $params['datum'] = $datum;
   if (isset($naam)) $params['naam'] = $naam;
   $result = oAuthRequest($resource, 'GET', $params);
   return drupal_json_decode($result);
-  
-
 }
 
 /**
- * Consume web service for starts
+ * Consume web service for starts by index
  * @param string $datum date range YYYY[-MM[-DD]]
  * @param string $naam (optional) value for Gezagvoerder of Tweede
  * @returns array of start records
@@ -1789,111 +1666,12 @@ function ezacstart_get_starts($id, $datum, $naam) {
  **/
 function ezacstart_get_starts_index($datum, $naam) {
 // build REST resource request
+// oAuthRequest is defined in ezacapi.inc 
   $resource = EZAC_ENDPOINT .'starts.json';
-  /*
-  $resource .= '?datum=' .$datum; 
-  if (isset($naam)) {
-    $resource .= '&naam=' .$naam;
-  }
   
-  
-  // GET resource data
-  $options['headers'] = array(
-    'Content-Type' => 'application/json',
-    'charset'=> 'UTF-8',
-    'Connection'=> 'Keep-Alive',
-    );
-  $options['method'] = 'GET';
-  $result = drupal_http_request($resource, $options);
- 
-  // Decode json format
-  if ($result->status_message <>  'OK') { //error
-    drupal_set_message('error ' .$result->code .' - ' .$result->error);
-    return; 
-  }
-  // return result
-
-  return drupal_json_decode($result->data);
-  */ 
-  
-  // Replace code for oAuthRequest
   $params = array();
   $params['datum'] = $datum;
   if (isset($naam)) $params['naam'] = $naam;
   $result = oAuthRequest($resource, 'GET', $params);
   return drupal_json_decode($result);
-  
-}
-
-/**
- * oAuth example code (adapted)
- * @param string $req_url api endpoint url
- * @param string $req_method POST, PUT, DELETE
- * @param array $params parameters for request
- */
-function oAuthRequest($req_url, $req_method, $params) {
-// @see http://oauth.googlecode.com/svn/code/php/OAuth.php
-  global $base_url;
-  //require 'OAuth.php';
-  // Establish an OAuth consumer based on consumer key and secret
-    //@TODO Move key and secret in configuration file
-  $key ='3kvcCaWzSVmLm2jUWGDHBpJuxdPSpWdU'; // for user start on ezac.nl
-  $secret = 'e9d4zECM7P6nasogX4gryhDyT2uRZ8Vs';
-  $consumer = new OAuthConsumer($key, $secret, NULL); 
-  // Setup OAuth request
-  //$api_endpoint = 'https://www.mydrupalsite.com/my_endpoint/resource_name';
-  //$api_endpoint = "$base_url/api/starts.json";
-  $api_endpoint = $req_url;
-  //$params = array('param1' => 'value1');
-  $request = OAuthRequest::from_consumer_and_token($consumer, NULL, $req_method, $api_endpoint, $params);
-  // Sign the constructed OAuth request using HMAC-SHA1
-  $request->sign_request(new OAuthSignatureMethod_HMAC_SHA1(), $consumer, NULL);
-  // Make signed OAuth request to the API server
-  $output = array();
-  foreach($params as $key => $item) {
-    $output[] = $key . '=' . urlencode($item);
-  }
-  $url = $api_endpoint . '?' .  implode('&', $output);
-  $curl = curl_init();
-  $options = array(
-    CURLOPT_URL => $url,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_FAILONERROR => false,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_HTTPHEADER => array(
-			  'Content-Type: application/json',
-			  $request->to_header()),
-  );
-  curl_setopt_array($curl, $options);
-  //switch http method
-  switch ($req_method) {
-    case 'GET':
-      curl_setopt($curl, CURLOPT_HTTPGET, true);
-      break;
-    case 'POST':
-      curl_setopt($curl, CURLOPT_POST, true);
-      //curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($params)); //passed url-encoded instead
-      break;
-    case 'PUT':
-      curl_setopt($curl, CURLOPT_PUT, true);
-      break;
-    case 'DELETE':
-      curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $req_method);
-      break;
-  }
-  $response = curl_exec($curl);
-  //dpm($req_url); //DEBUG
-  //dpm($req_method);
-  //dpm($params);
-  //dpm($response);
-  //insert error handling
-  if (!$response) {
-    //error
-    $err_txt = curl_error;
-    $err_no = curl_errno;
-    drupal_set_message("error $err_txt ($err_no) for $url", 'error');
-    return;
-  }
-  curl_close($curl);
-  return $response;
 }

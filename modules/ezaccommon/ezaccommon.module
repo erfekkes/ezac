@@ -1,0 +1,184 @@
+<?php
+// $Id$
+
+/**
+* common definitions and functions for ezac.nl/drupal
+*
+* ezacapi.inc - defines API endpoint and oAuth key and secret
+* oAuthRequest - handle oAuth enabled RESTful API requests
+*
+* ezac_show_date(datum)
+* ezac_get_afkorting
+* ezac_get_naam(afkorting)
+* ezac_get_namen
+* ezac_get_kisten
+*
+*/
+
+
+/**
+ * Helper function to show datum
+ * @param string $datum YYYY-MM-DD
+ * @returns string $dat_string 
+ */
+function ezac_show_date($datum) {
+  //handle datum range
+  if (strpos($datum, ':')) { //date range given
+    $date_range = explode(':', $datum);
+    $dat_string = ezacstart_show_date($date_range[0]) .' - ' .ezacstart_show_date($date_range[1]);
+    return $dat_string;
+  }
+  $datumvalue = strtotime($datum);
+  $dat_string = '';
+  if (strlen($datum) > 7) {
+    $dat_string .= t(date('l', $datumvalue)); // dag van de week
+    $dat_string .= " " .t(date('j', $datumvalue)) ." "; // dag zonder nul
+  }
+  if (strlen($datum) > 4) {
+    $dat_string .= t(date('F', $datumvalue)) . " "; // maand volledig
+  }
+  $dat_string .= " " .t(date('Y', $datumvalue)); // jaar
+  return $dat_string;
+}
+
+/**
+ * helper function to find afkorting for current user
+ * @returns string $afkorting
+ */
+function ezac_get_afkorting() {
+  // find ezac_Leden Afkorting for logged-in user
+  global $user;
+  
+  $query = db_select('ezac_Leden', 'l')
+  ->fields('l',array('afkorting'))
+  ->condition('l.User', $user->name, '=');
+  $afkorting = $query->execute()->fetchField();
+  return $afkorting;
+}
+
+/**
+ * helper function for finding a name
+ * @param string $name afkorting to be found
+ * @returns string naam when found else $name from input
+ */
+function ezac_get_naam($afkorting) {
+    if ($afkorting == '') return '';
+    $query = db_select('ezac_Leden', 'l')
+    ->fields('l',array('voornaam', 'voorvoeg', 'achternaam'))
+    ->condition('l.afkorting', $afkorting, '=');
+    $naam = $query->execute()->fetchassoc();
+
+    return isset($naam) 
+         ? sprintf("%s %s %s", $naam['voornaam'], $naam['voorvoeg'], $naam['achternaam'])
+         : $afkorting; //afkorting niet gevonden
+}
+
+/**
+ * Lees VL namen in tabel
+ */
+function ezac_get_namen() {
+  $query = db_select('ezac_Leden', 'l')
+  ->fields('l',array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'))
+  ->condition('l.code', 'VL', '=')
+  ->condition('l.actief', '1', '=')
+  ->orderBy('l.voornaam', 'ASC')
+  ->orderBy('l.achternaam', 'ASC');
+  $namen = $query->execute()->fetchAll();
+  
+  foreach ($namen as $naam) {
+    $naam_tabel[$naam->afkorting] = sprintf("%s %s %s", $naam->voornaam, $naam->voorvoeg, $naam->achternaam);
+  }
+  return $naam_tabel;
+}
+
+/**
+ * Lees Kisten in tabel
+ */
+function ezac_get_kisten() {
+  $query = db_select('ezac_Kisten', 'k')
+  ->fields('k',array('registratie', 'inzittenden', 'prive'))
+  ->condition('k.actief', '1', '=')
+  ->orderBy('k.prive', 'ASC')
+  ->orderBy('k.registratie', 'ASC');
+  $kisten = $query->execute()->fetchAll();
+  
+  foreach ($kisten as $kist) {
+    $kist_tabel[$kist->registratie] = $kist->inzittenden;
+  }
+  return $kist_tabel;
+}
+
+//get API endpoint and key definitions
+require_once('./'. drupal_get_path('module', 'ezaccommon') .'/ezacapi.inc');
+
+/**
+ * oAuth example code (adapted)
+ * @param string $req_url api endpoint url
+ * @param string $req_method POST, PUT, DELETE
+ * @param array $params parameters for request
+ */
+function oAuthRequest($req_url, $req_method, $params) {
+// @see http://oauth.googlecode.com/svn/code/php/OAuth.php
+  global $base_url;
+  //require 'OAuth.php';
+  // Establish an OAuth consumer based on consumer key and secret
+  $key    = EZAC_ENDPOINT_KEY; // from ezacapi.inc
+  $secret = EZAC_ENDPOINT_SECRET;
+  $consumer = new OAuthConsumer($key, $secret, NULL); 
+  // Setup OAuth request
+  //$api_endpoint = 'https://www.mydrupalsite.com/my_endpoint/resource_name';
+  //$api_endpoint = "$base_url/api/starts.json";
+  $api_endpoint = $req_url;
+  //$params = array('param1' => 'value1');
+  $request = OAuthRequest::from_consumer_and_token($consumer, NULL, $req_method, $api_endpoint, $params);
+  // Sign the constructed OAuth request using HMAC-SHA1
+  $request->sign_request(new OAuthSignatureMethod_HMAC_SHA1(), $consumer, NULL);
+  // Make signed OAuth request to the API server
+  $output = array();
+  foreach($params as $key => $item) {
+    $output[] = $key . '=' . urlencode($item);
+  }
+  $url = $api_endpoint . '?' .  implode('&', $output);
+  $curl = curl_init();
+  $options = array(
+    CURLOPT_URL => $url,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FAILONERROR => false,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_HTTPHEADER => array(
+			  'Content-Type: application/json',
+			  $request->to_header()),
+  );
+  curl_setopt_array($curl, $options);
+  //switch http method
+  switch ($req_method) {
+    case 'GET':
+      curl_setopt($curl, CURLOPT_HTTPGET, true);
+      break;
+    case 'POST':
+      curl_setopt($curl, CURLOPT_POST, true);
+      //curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($params)); //passed url-encoded instead
+      break;
+    case 'PUT':
+      curl_setopt($curl, CURLOPT_PUT, true);
+      break;
+    case 'DELETE':
+      curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $req_method);
+      break;
+  }
+  $response = curl_exec($curl);
+  //dpm($req_url); //DEBUG
+  //dpm($req_method);
+  //dpm($params);
+  //dpm($response);
+  //insert error handling
+  if (!$response) {
+    //error
+    $err_txt = curl_error;
+    $err_no = curl_errno;
+    drupal_set_message("error $err_txt ($err_no) for $url", 'error');
+    return;
+  }
+  curl_close($curl);
+  return $response;
+}

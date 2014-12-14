@@ -16,12 +16,19 @@
 * Globals
 */
   global $base_url;
-  DEFINE ('EZAC_ENDPOINT', "$base_url/api/");
+  require_once('./'. drupal_get_path('module', 'ezaclvs') .'/ezacapi.inc');
+
+  //DEFINE ('EZAC_ENDPOINT', "$base_url/api/");
   //drupal_set_message(EZAC_ENDPOINT ." in gebruik"); //DEBUG
   //DEFINE ('EZAC_ENDPOINT', 'http://www.ezac.nl/drupal/api/'); //production host
+
+  DEFINE ('DETAILS', true); //for ezacstart_display
+  DEFINE ('TOTALS', false);
+
   global $datum_default;
   global $maand_default;
   global $jaar_default;
+  global $download;
   
   $datum_default = ($datum_default == '') ? date('Y-m-d') : $datum_default;
   $maand_default = ($maand_default == '') ? date('Y-m') : $maand_default;
@@ -155,7 +162,25 @@ function ezacstart_menu() {
       'title' => 'Inzien per dag',
       'description'=> 'Startlijst per dag',
       'page callback' => '_ezacstart_browse',
-      'page arguments' => array(2, 3), //datum en naam
+      'page arguments' => array(2, 3, DETAILS), //datum en naam met details
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_CALLBACK,
+    );
+  $items['startlijst/totals'] = array(
+      'title' => 'Totalen inzien per dag',
+      'description'=> 'Startlijst totalen per dag',
+      'page callback' => '_ezacstart_browse',
+      'page arguments' => array(2, 3, TOTALS), //datum en naam met details
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_start_view'),
+      'type' => MENU_CALLBACK,
+    );
+  $items['startlijst/download'] = array(
+      'title' => 'Download',
+      'description'=> 'Download a report',
+      'page callback' => '_ezacstart_download',
+      'page arguments' => '',
       'access callback' => 'user_access',
       'access arguments' => array('ezac_start_view'),
       'type' => MENU_CALLBACK,
@@ -757,7 +782,7 @@ function ezacstart_form_submit($form, &$form_state) {
  *@param string $datum
  *@param string $afkorting
  */
-function _ezacstart_browse($datum, $afkorting) {
+function _ezacstart_browse($datum, $afkorting, $details) {
   if ($afkorting == '') {
     $afkorting = null;
     $title = 'Starts van ' .ezacstart_show_date($datum);
@@ -776,16 +801,17 @@ function _ezacstart_browse($datum, $afkorting) {
   $current_url = "$base_url/startlijst/browse/$datum";
   if ($afkorting) $current_url .= "/$afkorting";
 
-  return ezacstart_display($title, $starts);
+  return ezacstart_display($title, $starts, $details);
 }
 
 /**
  *Display selected startlijst view
  *@param string $title
  *@param array $starts
+ *@param boolean $details show details (true) or totals only (false)
  *@returns array themeable output
  */
-function ezacstart_display($title, array $starts) {
+function ezacstart_display($title, array $starts, $details) {
   // turn cache off
   drupal_add_http_header('Cache-control', 'no-cache');
   drupal_add_http_header('Pragma', 'no-cache'); //http 1.0
@@ -793,6 +819,8 @@ function ezacstart_display($title, array $starts) {
   //global $current_url;
   //drupal_set_message("current url: $current_url"); //DEBUG
   
+  if (!isset($details)) $details = 1;
+    
   // display results 
   unset($output); //clear
   $output[0]['#type'] = 'markup';
@@ -804,49 +832,50 @@ function ezacstart_display($title, array $starts) {
     $registratie = $start['registratie'];
     switch ($start['startmethode']) {
       case 'L': {
-	$soort = t('Lier');
+	$sm = t('Lier');
 	break;
       }
       case 'M': {
-	$soort = t('Motor');
+	$sm = t('Motor');
 	break;
       }
       case 'S': {
-	$soort = t('Sleep');
+	$sm = t('Sleep');
 	break;
       }
     }
-    $sm = $soort;
-    $soort .= ' ' .$start['soort'];
+    $soort = $start['soort'];
+    $sm_soort = $sm .' ' .$soort;
     //tel starts per startmethode
     $startmethode[$sm]['aantal'] =
       (isset($startmethode[$sm]['aantal'])) 
       ? $startmethode[$sm]['aantal'] + 1
       : 1;
-    
-    //check edit permission
-    $may_edit = user_access('ezac_start_edit');
-    $user_afkorting = ezacstart_get_afkorting();
-    $eigen_start = (($start['gezagvoerder'] == $user_afkorting) || ($start['tweede'] == $user_afkorting));
-    if ($may_edit || $eigen_start){
-      //link to edit function
-      $datum_link = '<a href=' .base_path() .'startlijst/edit/' .$start['id'] .'>' .$start['datum'] .'</a>';
+      
+    if ($details) {//only add details when requested
+        //check edit permission
+        $may_edit = user_access('ezac_start_edit');
+        $user_afkorting = ezacstart_get_afkorting();
+        $eigen_start = (($start['gezagvoerder'] == $user_afkorting) || ($start['tweede'] == $user_afkorting));
+        if ($may_edit || $eigen_start){
+          //link to edit function
+          $datum_link = '<a href=' .base_path() .'startlijst/edit/' .$start['id'] .'>' .$start['datum'] .'</a>';
+        }
+        else $datum_link = $start['datum'];
+
+        $row[] = array(
+          $datum_link,
+          $registratie,
+          ezacstart_find_name($start['gezagvoerder']), 
+          ezacstart_find_name($start['tweede']), 
+          substr($start['start'],0,5),   //strip seconds
+          substr($start['landing'],0,5), //strip seconds
+          substr($start['duur'],0,5),    //strip seconds
+          $sm_soort,
+          ($start['instructie'] == 0) ? '' : 'Ja',
+          $start['opmerking'],
+        );
     }
-    else $datum_link = $start['datum'];
-    
-    $row[] = array(
-      $datum_link,
-      $registratie,
-      ezacstart_find_name($start['gezagvoerder']), 
-      ezacstart_find_name($start['tweede']), 
-      substr($start['start'],0,5),   //strip seconds
-      substr($start['landing'],0,5), //strip seconds
-      substr($start['duur'],0,5),    //strip seconds
-      $soort,
-      ($start['instructie'] == 0) ? '' : 'Ja',
-      $start['opmerking'],
-    );
-    
     $duur_hhmm = explode(':', $start['duur']);
     $duur_minuten = $duur_hhmm[0] * 60 + $duur_hhmm[1];
     
@@ -860,37 +889,47 @@ function ezacstart_display($title, array $starts) {
         ? $kist[$registratie]['duur']+ $duur_minuten
         : $duur_minuten,
      );
+      
+    $soort_tellers[$soort]['aantal'] =
+      (isset($soort_tellers[$soort]['aantal'])) 
+      ? $soort_tellers[$soort]['aantal'] + 1
+      : 1;
+    $soort_tellers[$soort]['duur'] =
+      (isset($soort_tellers[$soort]['duur']))
+        ? $soort_tellers[$soort]['duur'] + $duur_minuten
+        : $duur_minuten;
   }
   //drupal_set_message(var_dump($kist)); //DEBUG
 
-  // Table tag attributes
-  $attributes = array(
-    'border'      => 1,
-    'cellspacing' => 0,
-    'cellpadding' => 5,
-    'width'	  => '90%');
+  if ($details) {
+      // Table tag attributes
+      $attributes = array(
+        'border'      => 1,
+        'cellspacing' => 0,
+        'cellpadding' => 5,
+        'width'	  => '90%');
 
-  //Set up the table Headings
-  $header = array(
-    array('data' => t('datum')),
-    array('data' => t('kist')),
-    array('data' => t('gezag')),
-    array('data' => t('2e')),
-    array('data' => t('start')),
-    array('data' => t('landing')),
-    array('data' => t('duur')),
-    array('data' => t('soort')),
-    array('data' => t('instructie')),
-    array('data' => t('opmerking')),
-  );
-  
-  $output[1]['#theme'] = 'table';
-  $output[1]['#attributes'] = $attributes;
-  $output[1]['#header'] = $header;
-  if (isset($row)) $output[1]['#rows'] = $row;
-  $output[1]['#empty'] = t('Geen gegevens beschikbaar');
-  $output[1]['#weight'] = 3;
-  
+      //Set up the table Headings
+      $header = array(
+        array('data' => t('datum')),
+        array('data' => t('kist')),
+        array('data' => t('gezag')),
+        array('data' => t('2e')),
+        array('data' => t('start')),
+        array('data' => t('landing')),
+        array('data' => t('duur')),
+        array('data' => t('soort')),
+        array('data' => t('instructie')),
+        array('data' => t('opmerking')),
+      );
+
+      $output[1]['#theme'] = 'table';
+      $output[1]['#attributes'] = $attributes;
+      $output[1]['#header'] = $header;
+      if (isset($row)) $output[1]['#rows'] = $row;
+      $output[1]['#empty'] = t('Geen gegevens beschikbaar');
+      $output[1]['#weight'] = 3;
+  }
   //toon totalen per kist
     //Set up the table Headings
   
@@ -934,7 +973,7 @@ function ezacstart_display($title, array $starts) {
   //show starts per startmethode  
   $header3 = array(
     //array('data' => t('datum')),
-    array('data' => t('soort')),
+    array('data' => t('startmethode')),
     array('data' => t('aantal')),
   );
 
@@ -958,6 +997,33 @@ function ezacstart_display($title, array $starts) {
     $output[3]['#empty'] = t('Geen gegevens beschikbaar');
     $output[3]['#weight'] = 5;
     }
+
+  //@TODO insert table with $soort counters here
+  //show starts per soort  
+  $header4 = array(
+    array('data' => t('soort')),
+    array('data' => t('aantal')),
+    array('data' => t('duur')),
+  );
+
+    if (isset($soort_tellers)) {
+      foreach ($soort_tellers as $teller => $value) {
+        $hours = intval($value['duur'] / 60);
+        $minutes = $value['duur'] - ($hours * 60);
+          $row4[] = array(
+            $teller, //@TODO make CASE for SOORTen NORM DONA PASS CLUB
+            $value['aantal'],
+            sprintf($outputat, $hours, $minutes),
+          );
+      }
+    $output[4]['#theme'] = 'table';
+    $output[4]['#attributes'] = $attributes;
+    $output[4]['#header'] = $header4;
+    if (isset($row4)) $output[4]['#rows'] = $row4;
+    $output[4]['#empty'] = t('Geen gegevens beschikbaar');
+    $output[4]['#weight'] = 6;
+
+  }
 
   return $output;  
 }
@@ -1095,7 +1161,7 @@ function ezacstart_dag_form($form, &$form_state) {
   //display results
   if (isset($starts)) {
     $display_datum = ezacstart_show_date($datum);
-    $output = ezacstart_display("Starts op $display_datum", $starts);
+    $output = ezacstart_display("Starts op $display_datum", $starts, DETAILS);
   }
   $form = ezacstart_form_datum($form, $form_state, $datum);
   if (isset($output)) {
@@ -1168,7 +1234,7 @@ function ezacstart_brevet_form($form, &$form_state, $datum) {
   //display results
   if (isset($starts)) {
     $display_datum = ezacstart_show_date($datum);
-    $output = ezacstart_display("Jouw starts voor de afgelopen 12 maanden tot $display_datum", $starts);
+    $output = ezacstart_display("Jouw starts voor de afgelopen 12 maanden tot $display_datum", $starts, DETAILS);
   }
   $form = ezacstart_form_datum($form, $form_state, $datum);
   if (isset($output)) {
@@ -1271,6 +1337,7 @@ function _ezacstart_report($datum) {
  */
 function ezacstart_report_form($form, &$form_state) {
   global $jaar_default;
+  global $download;
   //get afkorting for current user
   //$afkorting = ezacstart_get_afkorting();
   // find starts for user in current month
@@ -1287,6 +1354,13 @@ function ezacstart_report_form($form, &$form_state) {
   $form[0]['#markup'] = "<p><h1>$title</h1></p>";
   $form[0]['#weight'] = 0;
 
+  //insert download button here
+  $form['download'] = array(
+    '#type' => 'submit',
+    '#value' => t('download'),
+    '#weight' => 0.5,
+  );
+  
   //loop for all VL
   $leden = db_select('ezac_Leden', 'l')
   ->fields('l', array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'))
@@ -1297,6 +1371,10 @@ function ezacstart_report_form($form, &$form_state) {
   ->execute()
   ->fetchAll();
   
+  //create csv array for download
+  //create table header
+  $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur\r\n"';
+  
   foreach ($leden as $lid) {
     $naam = sprintf("%s %s %s", $lid->voornaam, $lid->voorvoeg, $lid->achternaam);
     //$dagen = ezacstart_get_starts_index($datum, $lid->afkorting);
@@ -1304,10 +1382,10 @@ function ezacstart_report_form($form, &$form_state) {
     if (isset($dagen)) {
       $totaal = 0;
       $aantal_dagen = 0;
-      $duur = 0;
-      foreach ($dagen as $dag => $aantal) { //Hier veranderen naar array van aantal en duur
-	$totaal += $aantal[aantal];
-	$duur += $aantal[duur];
+      $duur = 0; // vluchtduur in minuten
+      foreach ($dagen as $dag => $aantal) { //aantal is array van [aantal] en [duur]
+	$totaal += $aantal['aantal'];
+	$duur += $aantal['duur'];
 	$aantal_dagen += 1;
       }
       $hours = intval($duur / 60);
@@ -1320,6 +1398,8 @@ function ezacstart_report_form($form, &$form_state) {
 	$totaal,
         sprintf('%02u:%02u', $hours, $minutes),
       );
+      //add csv formatted line to download array
+      $download .= sprintf('"%s";%u;"%s";%u;%02u:%02u\r\n',$naam,$aantal_dagen,$dag,$totaal,$hours,$minutes);
     }
   }
 
@@ -1368,20 +1448,82 @@ function ezacstart_report_form($form, &$form_state) {
   '#value' => t('selecteer'),
   '#weight' => 12,
   );
-  
   return $form;
-
 } //ezacstart_overzicht
 
 function ezacstart_report_form_validate($form, &$form_state) {
-  global $jaar_default;
-  $jaar_default = $form_state['values']['jaar'];
-  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+  $op = $form_state['values']['op'];
+  //drupal_set_message("validate op:$op"); //debug
+  if ($op == t('selecteer')) {
+    global $jaar_default;
+    $jaar_default = $form_state['values']['jaar'];
+    $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
+  }
+  return;
 }
 function ezacstart_report_form_submit($form, &$form_state) {
-  // empty
+  global $download;
+  $op = $form_state['values']['op'];
+  //drupal_set_message("submit op:$op"); //debug
+  //drupal_set_message($download); //debug
+  //submit button value == t('download')
+  if ($op == t('download')) {
+    $form_state['redirect'] = 'startlijst/download';
+  }
+  return;
 }
+/**
+ * output $download as text/plain file
+ * called through /startlijst/download menu entry
+ **/
+function _ezacstart_download() {
+  global $download;
+    //@TODO global $download is not required as data is reloaded in this routine ...
 
+  global $jaar_default;  
+  $datum = $jaar_default;
+  
+  //create table header
+  $CRLF = "\r\n";  
+  $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur"' .$CRLF;
+  
+  //loop for all VL
+  $leden = db_select('ezac_Leden', 'l')
+  ->fields('l', array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'))
+  ->condition('l.code', 'VL', '=')
+  ->condition('l.actief', true, '=')
+  ->orderBy('l.achternaam', 'ASC')
+  ->orderBy('l.voornaam', 'ASC')
+  ->execute()
+  ->fetchAll();
+  
+  foreach ($leden as $lid) {
+    $naam = sprintf("%s %s %s", $lid->voornaam, $lid->voorvoeg, $lid->achternaam);
+    $dagen = ezacstart_index_starts_by_date("$datum-01-01", "$datum-12-31", $lid->afkorting);
+    if (isset($dagen)) {
+      $totaal = 0;
+      $aantal_dagen = 0;
+      $duur = 0; // vluchtduur in minuten
+      foreach ($dagen as $dag => $aantal) { //aantal is array van [aantal] en [duur]
+	$totaal += $aantal[aantal];
+	$duur += $aantal[duur];
+	$aantal_dagen += 1;
+      }
+      $hours = intval($duur / 60);
+      $minutes = $duur - ($hours * 60);
+      //add csv formatted line to download array
+      $download .= sprintf('"%s";%u;"%s";%u;"%02u:%02u"',$naam,$aantal_dagen,$dag,$totaal,$hours,$minutes) .$CRLF;
+    }
+  }
+
+  if (isset($download)) {
+    drupal_add_http_header('Content-Type', 'text/plain; charset=utf-8');
+    drupal_add_http_header('Content-Disposition', 'attachment; filename="download.csv"'); 
+    print $download;
+  }
+  else drupal_set_message("download empty", "error");
+  return;
+}
 
 /**
  * starts per dag, maand of jaar
@@ -1429,7 +1571,7 @@ function ezacstart_datum_form($form, &$form_state, $afkorting) {
   if (isset($starts)) {
     $title = ($afkorting <> null)? 'Jouw starts voor ' : 'Alle starts voor ';
     $datum_label = ezacstart_show_date($datum_default);
-    $output = ezacstart_display("$title $datum_label", $starts);
+    $output = ezacstart_display("$title $datum_label", $starts, DETAILS);
   }
   $form = ezacstart_form_datum($form, $form_state, $datum_default);
   if (isset($output)) {
@@ -1691,11 +1833,14 @@ function ezacstart_get_starts_index($datum, $naam) {
  * @param string $req_method POST, PUT, DELETE
  * @param array $params parameters for request
  */
+
+/* now taken from ezaclvs/ezacapi.inc
 function oAuthRequest($req_url, $req_method, $params) {
 // @see http://oauth.googlecode.com/svn/code/php/OAuth.php
   global $base_url;
   //require 'OAuth.php';
   // Establish an OAuth consumer based on consumer key and secret
+    //@TODO Move key and secret in configuration file
   $key ='3kvcCaWzSVmLm2jUWGDHBpJuxdPSpWdU'; // for user start on ezac.nl
   $secret = 'e9d4zECM7P6nasogX4gryhDyT2uRZ8Vs';
   $consumer = new OAuthConsumer($key, $secret, NULL); 
@@ -1756,3 +1901,4 @@ function oAuthRequest($req_url, $req_method, $params) {
   curl_close($curl);
   return $response;
 }
+*/
