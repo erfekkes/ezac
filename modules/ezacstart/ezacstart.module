@@ -138,7 +138,7 @@ function ezacstart_menu() {
   $items['startlijst/rapport'] = array(
       'title' => 'Rapport',
       'description'=> 'Rapportage',
-      'page callback' => '_ezacstart_report',
+      'page callback' => 'ezacstart_report',
       'page arguments' => array(2), //datum,
       'access callback' => 'user_access',
       'access arguments' => array('ezac_start_edit'),
@@ -1177,11 +1177,11 @@ function ezacstart_brevet_form_submit($form, &$form_state) {
 function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
   // Compose query
   $query = db_select('ezac_Starts', 's');
-  $query->fields('s', array('id', 'datum', 'duur')); //SELECT * from ezac_starts
+  $query->fields('s', array('id', 'datum', 'duur')); 
   $query->condition('s.datum', array($datumStart, $datumEnd), 'BETWEEN');
   if (isset($naam)) {
     $query->condition(db_or()->condition('s.gezagvoerder', $naam, '=')
-                             ->condition('s.tweede', $naam, '=')); //$gezagvoerder = $naam OR $Tweede = $naam
+                             ->condition('s.tweede', $naam, '=')); 
   }
   if (isset($registratie)) {
     $query->condition('s.registratie', $registratie, '=');
@@ -1189,7 +1189,7 @@ function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
   $query->orderBy('s.datum', 'ASC');
   $query->orderBy('s.start', 'ASC');
 
-  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  $items = $query->execute()->fetchAll(); 
 
   foreach ($items as $item) {
     $datum = substr($item->datum,0,10);
@@ -1197,9 +1197,6 @@ function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
     $duur_hhmm = explode(':', $duur);
     $duur_minuten = $duur_hhmm[0] * 60 + $duur_hhmm[1];
     
-    //dpm($item, '$item'); //debug
-    //dpm($duur, '$duur'); //debug
-
     if (!isset($index[$datum])) {
         $index[$datum]['aantal'] = 1;
 	$index[$datum]['duur'] = $duur_minuten;
@@ -1209,7 +1206,6 @@ function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
 	$index[$datum]['duur'] += $duur_minuten;
     }
   }
-  //dpm($index, '$index'); //debug
   if (isset($index)) return $index;
   else return;
 }
@@ -1217,12 +1213,17 @@ function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
 
 /**
 * overview of the ezac startlijst (vliegdagen)
-* @param string $datum optional
-* @returns array themeable output for starts index for current user
+* @param string $datum optional YYYY
+* @param array $list optional list of afkorting values for selected overview
+* @returns array themeable output for starts index
 */
-function _ezacstart_report($datum) {
-  if (isset($datum)) {
+function ezacstart_report($datum, $list = NULL) {
+  if (isset($datum) && !empty($datum)) {
     $jaar_default = substr($datum, 0, 4);
+  }
+  else {
+      $datum = date('Y');
+      $jaar_default = $datum;
   }
   
   //store current path
@@ -1230,23 +1231,22 @@ function _ezacstart_report($datum) {
   global $current_url;
   $current_url = "$base_url/startlijst/rapport/$datum";
 
-  return drupal_get_form('ezacstart_report_form');
+  return drupal_get_form('ezacstart_report_form', $datum, $list);
 }
 /**
- *select Jaar in form
- *show starts for user in jaar (vliegdagen)
- */
-function ezacstart_report_form($form, &$form_state) {
+*select Jaar in form
+* show starts in jaar (vliegdagen)
+* @param string $datum YYYY optional
+* @param array $list optional list of afkorting values for selected overview
+*/
+function ezacstart_report_form($form, &$form_state, $datum = NULL, $list = NULL) {
   global $jaar_default;
   global $download;
-  //get afkorting for current user
-  //$afkorting = ezac_get_afkorting();
-  // find starts for user in current month
-  // TODO sanitize $datum
+
   if (!isset($datum)) {
     $datum = $jaar_default;
+    //$datum = date('Y');
   }
-  //$starts = ezacstart_get_starts_index($jaar_default, $afkorting);
 
   $title = 'Vliegdagen overzicht';
   //display results
@@ -1262,72 +1262,10 @@ function ezacstart_report_form($form, &$form_state) {
     '#weight' => 0.5,
   );
   
-  //loop for all VL
-  $leden = db_select('ezac_Leden', 'l')
-  ->fields('l', array('afkorting', 'voornaam', 'voorvoeg', 'achternaam'))
-  ->condition('l.code', 'VL', '=')
-  ->condition('l.actief', true, '=')
-  ->orderBy('l.achternaam', 'ASC')
-  ->orderBy('l.voornaam', 'ASC')
-  ->execute()
-  ->fetchAll();
-  
-  //create csv array for download
-  //create table header
-  $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur\r\n"';
-  
-  foreach ($leden as $lid) {
-    $naam = sprintf("%s %s %s", $lid->voornaam, $lid->voorvoeg, $lid->achternaam);
-    //$dagen = ezacstart_get_starts_index($datum, $lid->afkorting);
-    $dagen = ezacstart_index_starts_by_date("$datum-01-01", "$datum-12-31", $lid->afkorting);
-    if (isset($dagen)) {
-      $totaal = 0;
-      $aantal_dagen = 0;
-      $duur = 0; // vluchtduur in minuten
-      foreach ($dagen as $dag => $aantal) { //aantal is array van [aantal] en [duur]
-	$totaal += $aantal['aantal'];
-	$duur += $aantal['duur'];
-	$aantal_dagen += 1;
-      }
-      $hours = intval($duur / 60);
-      $minutes = $duur - ($hours * 60);
-
-      $row[] = array(
-	'<a href=' .base_path() .'startlijst/browse/' .$datum .'/' .$lid->afkorting .'>' .$naam .'</a>',
-	$aantal_dagen,
-	$dag,
-	$totaal,
-        sprintf('%02u:%02u', $hours, $minutes),
-      );
-      //add csv formatted line to download array
-      $download .= sprintf('"%s";%u;"%s";%u;%02u:%02u\r\n',$naam,$aantal_dagen,$dag,$totaal,$hours,$minutes);
-    }
-  }
-
-  // Table tag attributes
-  $attributes = array(
-    'border'      => 1,
-    'cellspacing' => 0,
-    'cellpadding' => 5,
-    'width'	  => '90%'
-    );
-
-  //Set up the table Headings
-  $header = array(
-    array('data' => t('naam')),
-    array('data' => t('aantal<br>vliegdagen')),
-    array('data' => t('laatste dag')),
-    array('data' => t('totaal<br>aantal starts')),
-    array('data' => t('totaal<br>duur')),
-  );
-  
-  $form[1]['#theme'] = 'table';
-  $form[1]['#attributes'] = $attributes;
-  $form[1]['#header'] = $header;
-  if (isset($row)) $form[1]['#rows'] = $row;
-  $form[1]['#empty'] = t('Geen gegevens beschikbaar');
+  $form[1] = ezacstart_report_table($datum, $list);
   $form[1]['#weight'] = 3;
-  
+
+
   $form['intro'] = array(
   '#type'   => 'markup',
   '#markup' => '<h2>Selecteer jaar voor overzicht</h2>',
@@ -1351,6 +1289,81 @@ function ezacstart_report_form($form, &$form_state) {
   );
   return $form;
 } //ezacstart_overzicht
+
+/**
+* build form table element
+* @param string $datum YYYY optional
+* @param array $list optional list of afkorting values for selected overview
+* @returns array for $form table
+**/
+function ezacstart_report_table($datum, $list) {
+    global $download;
+
+    //loop for all VL
+    $namen = ezac_get_namen();
+    //dpm($list,'list'); //debug
+    if (isset($list)) {
+        //filter selected leden values
+        $namen=array_intersect_key($namen, $list);
+    }
+    //create csv array for download
+    //create table header
+    //@TODO $download global does not function currently
+    $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur\r\n"';
+  
+    foreach ($namen as $afkorting => $naam) {
+        $dagen = ezacstart_index_starts_by_date("$datum-01-01", "$datum-12-31", $afkorting);
+        if (isset($dagen)) {
+          $totaal = 0;
+          $aantal_dagen = 0;
+          $duur = 0; // vluchtduur in minuten
+          foreach ($dagen as $dag => $aantal) { //aantal is array van [aantal] en [duur]
+            $totaal += $aantal['aantal'];
+            $duur += $aantal['duur'];
+            $aantal_dagen += 1;
+          }
+          $hours = intval($duur / 60);
+          $minutes = $duur - ($hours * 60);
+
+          $row[] = array(
+            '<a href=' .BASE_PATH() .'startlijst/browse/' .$datum .'/' .$afkorting .'>' .$naam .'</a>',
+            $aantal_dagen,
+            $dag,
+            $totaal,
+            sprintf('%02u:%02u', $hours, $minutes),
+          );
+          //add csv formatted line to download array - @TODO does not work now
+          $download .= sprintf('"%s";%u;"%s";%u;%02u:%02u\r\n',$naam,$aantal_dagen,$dag,$totaal,$hours,$minutes);
+        }
+    }
+
+    // Table tag attributes
+    $attributes = array(
+        'border'      => 1,
+        'cellspacing' => 0,
+        'cellpadding' => 5,
+        'width'	  => '90%'
+    );
+
+    //Set up the table Headings
+    $header = array(
+        array('data' => t('naam')),
+        array('data' => t('aantal<br>vliegdagen')),
+        array('data' => t('laatste dag')),
+        array('data' => t('totaal<br>aantal starts')),
+        array('data' => t('totaal<br>duur')),
+    );
+
+
+    $form_element['#theme'] = 'table';
+    $form_element['#attributes'] = $attributes;
+    $form_element['#header'] = $header;
+    if (isset($row)) $form_element['#rows'] = $row;
+    $form_element['#empty'] = t('Geen gegevens beschikbaar');
+    //$form_element['#weight'] = 3;
+
+    return $form_element;
+}
 
 function ezacstart_report_form_validate($form, &$form_state) {
   $op = $form_state['values']['op'];

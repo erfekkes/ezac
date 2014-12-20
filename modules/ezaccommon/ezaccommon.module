@@ -75,6 +75,7 @@ function ezac_get_naam($afkorting) {
 
 /**
  * Lees VL namen in tabel
+ * @returns array $naam_tabel(afkorting, voornaam_voorvoeg_achternaam)
  */
 function ezac_get_namen() {
   $query = db_select('ezac_Leden', 'l')

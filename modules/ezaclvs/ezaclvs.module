@@ -83,12 +83,22 @@ function ezaclvs_menu() {
   $items['lvs/overzicht'] = array(
       'title' => 'Overzicht',
       'description'=> 'Overzicht bevoegdheden',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('ezaclvs_persoon_form', TRUE),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('ezaclvs_persoon_form', TRUE),
       'access callback' => 'user_access',
       'access arguments' => array('ezac_lvs_input'),
       'type' => MENU_LOCAL_TASK,
       'weight' => 2,
+    );
+  $items['lvs/rapport'] = array(
+      'title' => 'Rapport',
+      'description'=> 'Rapportage LVS',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('ezaclvs_rapport_form', TRUE),
+      'access callback' => 'user_access',
+      'access arguments' => array('ezac_lvs_input'),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 3,
     );
   $items['lvs/download'] = array(
       'title' => 'Download',
@@ -106,16 +116,16 @@ function ezaclvs_menu() {
 
 /**
  * Lees bevoegdheden in tabel
- * @returns array $bevoegdheden [id] = array(bevoegdheid, naam, leerling, instructeur)
+ * @returns array $bevoegdheden [bevoegdheid] = array(id, naam, status, instructeur)
  */
 function ezaclvs_get_bevoegdheden() {
-  $query = db_select('ezac_lvs_bevoegdheden', 'b');
-  $query->fields('b', array('id', 'bevoegdheid', 'naam', 'status', 'instructeur'));
-  $bevoegdheden = $query->execute()->fetchAll();
+  $bevoegdheden = db_select('ezac_lvs_bevoegdheden', 'b')
+                ->fields('b', array('id', 'bevoegdheid', 'naam', 'status', 'instructeur'))
+                ->execute()->fetchAll();
   
   foreach ($bevoegdheden as $bevoegdheid) {
-    $bevoegd[$bevoegdheid->id] = array(
-        'bevoegdheid' => $bevoegdheid->bevoegdheid,
+    $bevoegd[$bevoegdheid->bevoegdheid] = array(
+        'id' => $bevoegdheid->id,
         'naam' => $bevoegdheid->naam,
         'status' => $bevoegdheid->status, //indicatie leerling status
         'instructeur' => $bevoegdheid->instructeur, //indicatie instructeur status
@@ -410,12 +420,13 @@ function ezaclvs_verslag_form_submit($form, &$form_state) {
 * Enter opmerking and/or bevoegdheid when $overzicht == FALSE
 * @param array $form
 * @param array &$form_state
-* @param boolean $overzicht
+* @param boolean $overzicht FALSE: enter details, TRUE: overzicht
 * @returns array $form renderable drupal form
 */
 function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     
     global $namen;
+    global $bevoegdheden;
     $namen = ezac_get_namen();
     
     //instructeur  is logged-in user
@@ -448,6 +459,8 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
         '#weight' => 2,
         );
     }
+    
+    //@TODO select time period for overzicht
     
     //select person
     $form['persoon'] = array(
@@ -535,8 +548,8 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     $bevoegdheden = ezaclvs_get_bevoegdheden();
     $bv_list[0] = '<Geen wijziging>';
     if (isset($bevoegdheden)) {
-        foreach ($bevoegdheden as $id => $bevoegdheid) {
-            $bv_list[$bevoegdheid['bevoegdheid']] = $bevoegdheid['naam'];
+        foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+            $bv_list[$bevoegdheid] = $bevoegdheid_array['naam'];
         }
     }
     //toon huidige bevoegdheden
@@ -546,10 +559,10 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     $query->fields('b', array('id', 'afkorting', 'instructeur', 'datum_aan', 'bevoegdheid', 'actief', 'onderdeel', 'opmerking'));
     $query->condition('afkorting', $vlieger_afkorting, '=');
     $query->condition('actief', TRUE, '=');
-    $bevoegdheden = $query->execute()->fetchAll();
+    $vlieger_bevoegdheden = $query->execute()->fetchAll();
     // put in table
     
-    if (!empty($bevoegdheden)) { //create fieldset
+    if (!empty($vlieger_bevoegdheden)) { //create fieldset
         $form['vliegers']['bevoegdheden'][$vlieger_afkorting] = array(
             '#title' => t("Bevoegdheden voor $helenaam"),
             '#type'=> 'fieldset',
@@ -562,7 +575,7 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
             );
         }
 
-    foreach ($bevoegdheden as $bevoegdheid) {
+    foreach ($vlieger_bevoegdheden as $bevoegdheid) {
         //show as markup in form or textfield with edit=false
         $form['vliegers']['bevoegdheden'][$vlieger_afkorting][$bevoegdheid->id] = array(
             '#title' => $bevoegdheid->datum_aan,
@@ -583,7 +596,7 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
         $form['bevoegdheid'] = array(
         '#title' => 'Bevoegdheid',
         '#type' => 'container',
-        '#prefix' => '</div id="bevoegdheid-div">',
+        '#prefix' => '<div id="bevoegdheid-div">',
         '#suffix' => '</div>',
         '#required' => FALSE,
         '#collapsible' => TRUE,
@@ -607,6 +620,7 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
             ), 
         );
 
+        //@TODO het onderstaande if blok werkt niet.
         if (isset($form_state['values']['bevoegdheid']['keuze']) 
             && ($form_state['values']['bevoegdheid']['keuze'] <> '0')) { 
 
@@ -644,9 +658,11 @@ function ezaclvs_bevoegdheid_callback($form, $form_state) {
 }
 
 function ezaclvs_persoon_form_validate($form, &$form_state) {
+    //@TODO verify that bevoegdheid is not given earlier
 }
     
 function ezaclvs_persoon_form_submit ($form, &$form_state) {
+    global $bevoegdheden;
     
     if ($form_state['values']['vliegers']['opmerking'] <> '') {
         $id = db_insert('ezac_LVS_dagverslagen_lid')
@@ -680,22 +696,42 @@ function ezaclvs_persoon_form_submit ($form, &$form_state) {
             ->fields('b', array('status'))
             ->execute()->fetchField();
 
-        switch ($status)  {
-            case '0':   $num_updated = db_update('ezac_leden')
+        switch ($status)  { //change leerling and instructie status
+            case '1':   $num_updated = db_update('ezac_leden') //DBO
                                      ->fields(array('leerling' => 1))
                                      ->condition('afkorting', $form_state['values']['persoon'], '=')
                                      ->execute();
                         break;
-            case '1':   $num_updated = db_update('ezac_leden')
+            case '2':   $num_updated = db_update('ezac_leden') //SOLO
+                                     ->fields(array('leerling' => 1))
+                                     ->condition('afkorting', $form_state['values']['persoon'], '=')
+                                     ->execute();
+                        break;
+            case '3':   $num_updated = db_update('ezac_leden') //GPL
                                      ->fields(array('leerling' => 0))
                                      ->condition('afkorting', $form_state['values']['persoon'], '=')
                                      ->execute();
                         break;
-            case '2':   $num_updated = db_update('ezac_leden')
+            case '4':   $num_updated = db_update('ezac_leden') //Instructeur
                                      ->fields(array('instructie' => 1))
                                      ->condition('afkorting', $form_state['values']['persoon'], '=')
                                      ->execute();
                         break;
+            case '5':   $num_updated = db_update('ezac_leden') //Examinator
+                                     ->fields(array('instructie' => 1))
+                                     ->condition('afkorting', $form_state['values']['persoon'], '=')
+                                     ->execute();
+                        break;
+        }
+        $hoogste_bevoegdheid = db_select('ezac_leden', 'l')
+            ->condition('l.afkorting', $form_state['values']['persoon'], '=')
+            ->fields('l', array('bevoegdheid'))
+            ->execute()->fetchfield();
+        if ($status > $hoogste_bevoegdheid) {
+            $num_updated = db_update('ezac_leden') //update bevoegdheid
+                ->fields(array('bevoegdheid' => $status))
+                ->condition('afkorting', $form_state['values']['persoon'], '=')
+                ->execute();
         }
         drupal_set_message('Bevoegdheid aangemaakt', 'status');
     }
@@ -704,10 +740,85 @@ function ezaclvs_persoon_form_submit ($form, &$form_state) {
 }
 
 /**
-* Build overzicht form.
-* Show opmerking and/or bevoegdheid
+* Build rapport form.
+* Een DBO-er lijst, solisten lijst, een VVO-1 lijst en GPL-er lijst met aantal vluchten over te kiezen periode
 * @returns array $form renderable drupal form
 */
-function ezaclvs_overzicht_form($form, &$form_state) {
+function ezaclvs_rapport_form($form, &$form_state) {
+    // form header info
+
+    $bevoegdheden = ezaclvs_get_bevoegdheden();
+    foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+        $lijst[$bevoegdheid] = $bevoegdheid_array['naam'];
+    }
     
+    //@TODO make $datum selectable (range)
+    $datum = date('Y'); //this year
+
+    $form['titel']['#type'] = 'markup';
+    $form['titel']['#markup'] = "<p><h2>Rapportage Leerling volgsysteem $datum</h2></p>"; 
+    $form['titel']['#weight'] = 0;
+
+    // select report category: DBO, solist, VVO, GPL
+    $form['selectie'] = array(
+        '#type' => 'select',
+        '#title' => t('Selectie'),
+        //'#default_value' => isset($selectie) ? $selectie : 1,
+        '#options' => $lijst,
+        '#description' => t('Selecteer de categorie voor het overzicht'),
+        '#ajax' => array(
+            'callback' => 'ezaclvs_rapport_callback', 
+            'wrapper' => 'rapport-div',
+            'effect' => 'fade',
+            'progress' => array('type' => 'none'),
+        ),
+    );
+    
+    $form['rapport'] = array(
+        '#title' => t("Rapportage"),
+        '#type'=> 'container',
+        '#prefix' => '<div id="rapport-div">',
+        '#suffix' => '</div>',
+        //'#edit' => FALSE,
+        '#required' => FALSE,
+        '#weight' => 1,
+        '#tree' => TRUE,
+    );
+    
+    //create report
+    
+    $selectie = (isset($form_state['values']['selectie']))
+        ? $form_state['values']['selectie']
+        : key($lijst);
+
+    // select target group from ezac_leden
+    $leden = array();
+
+    $query = db_select('ezac_leden', 'l');
+    $query->join('ezac_lvs_bevoegdheid_lid', 'bl', 'l.afkorting = bl.afkorting');
+    $leden = $query->fields('l', array('afkorting'))
+            ->fields('bl', array('bevoegdheid'))
+            ->condition('l.actief', 1)
+            //geen hogere bevoegdheid dan geselecteerde
+            ->condition('l.bevoegdheid', $bevoegdheden[$selectie]['status'], '<=') 
+            ->condition('bl.bevoegdheid', $selectie, '=')
+            ->execute()->fetchAllKeyed(0, 1);
+
+    // build report details
+    // use report function from ezacstart module
+    $form['rapport']['overzicht'] = ezacstart_report_table($datum, $leden);
+    $form['rapport']['overzicht']['#tree'] = TRUE;
+    //$form['rapport']['overzicht']['#weight'] = 3;
+
+    return $form;
 }
+
+function ezaclvs_rapport_form_validate($form, &$form_state){
+}
+function ezaclvs_rapport_form_submit($form, &$form_state){
+}
+
+function ezaclvs_rapport_callback($form, $form_state) {
+    return $form['rapport'];
+}
+

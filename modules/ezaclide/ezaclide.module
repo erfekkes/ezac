@@ -794,6 +794,7 @@ function ezaclide_form_edit(&$form = NULL, &$form_state) {
   '#weight' => 19
   );
   //Instructeu Tekst 9
+  //@TODO remove this field, deprecated with LVS
   $form['instructeur'] = array(
   '#title' => t('Instructeur'),
   '#type' => 'textfield',
