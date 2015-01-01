@@ -1,9 +1,0 @@
-oauth consumer for ezac webservices
-
-consumer ezacstarts
-callback http://efekkes.dyndns.org/drupal/startcb
-
-sleutel
-3kvcCaWzSVmLm2jUWGDHBpJuxdPSpWdU
-secret
-e9d4zECM7P6nasogX4gryhDyT2uRZ8Vs
