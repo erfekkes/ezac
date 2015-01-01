@@ -825,11 +825,20 @@ function _ezacservices_starts_index($datum, $naam, $registratie) {
         $datumEnd   = $datum; // .' 23:59:59');
         break;
     default: //invalid
+      //check datum range
+      // range is indicated by date:date format
+      if (strpos($datum, ':')) {
+        $datum_range = explode(':',$datum);
+        ezacservices_check_datum($datum_range[0], $datumStart, $de);
+        ezacservices_check_datum($datum_range[1], $ds, $datumEnd);
+      }
+      else { //single date
         $errmsg = 'Invalid length parameter datum [' .$datum .']';
         return services_error($errmsg, 406);
-  }
+      }
+  } //switch
     //execute the query
-  return ezacservices_index_starts_by_date($datumStart, $datumEnd, $naam, $registratie);
+    return ezacservices_index_starts_by_date($datumStart, $datumEnd, $naam, $registratie);
 }
 
 /**

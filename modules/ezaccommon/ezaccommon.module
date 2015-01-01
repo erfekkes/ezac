@@ -25,7 +25,7 @@ function ezac_show_date($datum) {
   //handle datum range
   if (strpos($datum, ':')) { //date range given
     $date_range = explode(':', $datum);
-    $dat_string = ezacstart_show_date($date_range[0]) .' - ' .ezacstart_show_date($date_range[1]);
+    $dat_string = ezac_show_date($date_range[0]) .' - ' .ezac_show_date($date_range[1]);
     return $dat_string;
   }
   $datumvalue = strtotime($datum);
@@ -182,4 +182,50 @@ function oAuthRequest($req_url, $req_method, $params) {
   }
   curl_close($curl);
   return $response;
+}
+
+/**
+ * Send a simple email to specified recipient.
+ *
+ * @param string $message_subject
+ * @param string $message_body
+ */
+function ezac_mail($to, $message_subject, $message_body) {
+  $my_email = 'webmaster@ezac.nl';
+  
+  // These value can remain empty.
+  $my_module = 'ezaccommon';
+  $my_mail_token = 'mail_function';
+  
+  $from = variable_get('system_mail', $my_email);
+  $message = array(
+    'id' => $my_module . '_' . $my_mail_token,
+    'module' => $my_module, // evert
+    'key' => $my_mail_token, //evert
+    'to' => $to,
+    'from' => $my_email,
+    'subject' => $message_subject,
+    'body' => array($message_body),
+    'headers' => array(
+      'From' => $from,
+      'Sender' => $from,
+      'Bcc' => $my_email, //door Evert toegevoegd
+      'Return-Path' => $from,
+      'MIME-Version' => '1.0',
+      'Content-Type' => 'text/html; charset=UTF-8; format=flowed; delsp=yes',
+      'Content-Transfer-Encoding' => '8Bit',
+      'X-Mailer' => 'Drupal',
+    ),
+  );
+  $system = drupal_mail_system($my_module, $my_mail_token);  
+
+// The format function must be called before calling the mail function. 
+  $message = $system->format($message);
+  //dpm($message, 'formatted message'); // debug
+  if ($system->mail($message)) {
+    //drupal_set_message("Mail verzonden naar $to");
+  }
+  else {
+    drupal_set_message("Mail verzending naar $to [$message_subject] mislukt", 'error');
+  }
 }

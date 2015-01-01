@@ -4,3 +4,4 @@ description = Startlijst
 version = "7.x-0.1"
 core = 7.x
 dependencies[] = ezaccommon
+dependencies [] = date_default_timezone_set
