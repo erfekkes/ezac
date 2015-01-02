@@ -1086,6 +1086,7 @@ function ezacstart_show_form($form, &$form_state) {
         'maand' => '1 maand',
         'jaar' => '12 maanden',
         'seizoen' => 'dit seizoen',
+        'anders' => 'andere periode',
     );
     $details_list = array(
         'totalen' => 'alleen totalen',
@@ -1100,7 +1101,7 @@ function ezacstart_show_form($form, &$form_state) {
     '#type' => 'select',
     '#title' => 'Periode',
     '#options' => $periode_list,
-    '#weight' => -3,
+    '#weight' => -4,
     '#ajax' => array(
         'callback' => 'ezacstart_show_callback', 
         'wrapper' => 'show-div',
@@ -1144,7 +1145,7 @@ function ezacstart_show_form($form, &$form_state) {
     $periode = (isset($form_state['values']['periode']) && $form_state['values']['periode'])
         ? $form_state['values']['periode']
         : key($periode_list);
-
+    
     $details = (isset($form_state['values']['details']) && $form_state['values']['details'])
         ? $form_state['values']['details']
         : key($details_list);
@@ -1164,6 +1165,14 @@ function ezacstart_show_form($form, &$form_state) {
         case 'seizoen' :
             $datum = date('Y'); //this year
             break;
+        case 'anders' :
+            if (!isset($form_state['values']['datum_start'])) {
+                $datum = date('Y-m-d'); //default vandaag
+            }
+            else {
+                $datum = $form_state['values']['datum_start'] 
+                .':' .$form_state['values']['datum_eind'];
+            }
     }
     
     switch ($selectie) {
@@ -1190,13 +1199,61 @@ function ezacstart_show_form($form, &$form_state) {
     $starts = ezacstart_get_starts(null, $datum, $afkorting);
     $display_datum = ezac_show_date($datum);
 
-    $form['show'] = ezacstart_display("Starts op $display_datum", $starts, $det);
-    $form['show']['#prefix'] = '<div id="show-div">';
-    $form['show']['#suffix'] = '</div>';
+    $form['show'] = array(
+        '#type' => 'container',
+        '#prefix' => '<div id="show-div">',
+        '#suffix' => '</div>',
+    );
+
+    if (isset($form_state['values']['periode']) && $form_state['values']['periode'] == 'anders') {
+        $form['show']['anders'] = array(
+            '#type' => 'container',
+        );
+        $form['show']['anders']['datum_start'] = array(
+            '#title' => 'start datum',
+            '#type' => 'date_popup',
+            '#date_format' => 'Y-m-d',
+            '#default_value' => date('Y-m-d'),
+            '#ajax' => array(
+                'callback' => 'ezacstart_show_callback', 
+                'wrapper' => 'show-div',
+                'effect' => 'fade',
+                'progress' => array('type' => 'none'),
+                ),
+        );
+        $form['show']['anders']['datum_eind'] = array(
+            '#title' => 'eind datum',
+            '#type' => 'date_popup',
+            '#date_format' => 'Y-m-d',
+            '#default_value' => date('Y-m-d'),
+            '#ajax' => array(
+                'callback' => 'ezacstart_show_callback', 
+                'wrapper' => 'show-div',
+                'effect' => 'fade',
+                'progress' => array('type' => 'none'),
+                ),
+        );
+    }
+    
+    $form['show']['tabel'] = ezacstart_display("Starts op $display_datum", $starts, $det);
     
     return $form;
 } //ezacstart_show_form
 
+function ezacstart_show_form_validate($form, &$form_state) {
+    //check date values - form_set_error werkt niet $%$^^
+    if (isset($form_state['values']['datum_start'])) {
+        if (!ezacstart_checkdate($form_state['values']['datum_start']))
+            form_set_error('datum_start', 'Ongeldige datum');
+        if (!ezacstart_checkdate($form_state['values']['datum_eind']))
+            form_set_error('datum_eind', 'Ongeldige datum');
+        if (strtotime($form_state['values']['datum_start']) 
+            > strtotime($form_state['values']['datum_eind'])) {
+            form_set_error('eind datum', 'Eind datum moet na start datum zijn');
+            drupal_set_message('probleem met datum','error');
+        }
+    }
+}
 function ezacstart_show_callback($form, $form_state) {
     return $form['show'];
 }
