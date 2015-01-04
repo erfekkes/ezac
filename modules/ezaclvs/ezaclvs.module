@@ -429,7 +429,35 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
         '#default_value' => $afkorting,
         //'#description' => t('Instructeur of verantwoordelijke'),
         '#weight' => 2,
+        '#ajax' => array(
+            'callback' => 'ezaclvs_verslag_callback', 
+            'wrapper' => 'vliegers-div',
+            'effect' => 'fade',
+            'progress' => array('type' => 'none'),
+            ), 
     );
+
+    $instructeur = (isset($form_state['values']['instructeur']))
+        ? $form_state['values']['instructeur']
+        : $afkorting; //of key($namen)
+                    
+    //optie om alleen eigen leerlingen te selecteren
+    $form['leerling'] = array(
+        '#title' => t('Selecteer alleen eigen leerlingen'),
+        '#type' => 'checkbox',
+        '#default_value' => TRUE,
+        '#weight' => 2,
+        '#ajax' => array(
+            'callback' => 'ezaclvs_verslag_callback', 
+            'wrapper' => 'vliegers-div',
+            'effect' => 'fade',
+            'progress' => array('type' => 'none'),
+            ), 
+        );
+
+    $eigen_leerling = isset($form_state['values']['leerling'])
+        ? $form_state['values']['leerling']
+        : TRUE;
 
     // textaera field for 'weer' (2 lines)
     $form['weer'] = array(
@@ -465,16 +493,27 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
 
     $vliegers = array(); 
     foreach ($starts as $start) {
-        // @TODO filter for instructie starts (disregard gezagvoerder - instructeur)
         $gezagvoerder = $start->gezagvoerder;
-        if (!isset($vliegers[$gezagvoerder])) 
-            $vliegers[$gezagvoerder] = $namen[$gezagvoerder];
-        if (isset($start->tweede) && ($start->tweede <>'')) {
-            $tweede = $start->tweede;
-            if (!isset($vliegers[$tweede])) 
-                $vliegers[$tweede] = $namen[$tweede];
+        if ($eigen_leerling == FALSE) {
+            if (!isset($vliegers[$gezagvoerder])) 
+                $vliegers[$gezagvoerder] = $namen[$gezagvoerder];
+            if (isset($start->tweede) && ($start->tweede <>'')) {
+                $tweede = $start->tweede;
+                if (!isset($vliegers[$tweede])) 
+                    $vliegers[$tweede] = $namen[$tweede];
+            }
+        }
+        if (($eigen_leerling == TRUE) && ($gezagvoerder == $instructeur)) {
+            if (isset($start->tweede) && ($start->tweede <>'')) {
+                $tweede = $start->tweede;
+                if (!isset($vliegers[$tweede])) 
+                    $vliegers[$tweede] = $namen[$tweede];
+            }
         }
     }
+
+    //sorteer $vliegers array
+    asort($vliegers);
 
     //[vliegers] form wordt door AJAX opnieuw opgebouwd
     $form['vliegers'] = array(
@@ -500,8 +539,6 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
             '#required' => FALSE,
             '#collapsible' => TRUE,
             '#collapsed' => TRUE,
-            '#weight' => 5,
-            //'#tree' => TRUE,
         );
         
         if (!empty($verslagen)) { 
