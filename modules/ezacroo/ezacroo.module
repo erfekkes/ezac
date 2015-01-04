@@ -264,7 +264,7 @@ function ezacroo_page($select = '') {
   $Zelf = $line["Naam"];
   
   //Toon aanwezige diensten vanaf vandaag
-  $today  = date("Y-m-d", mktime());
+  $today  = date("Y-m-d");
   $query  = 'SELECT r.*, d.Omschrijving, ';
   $query .= "CONCAT_WS(' ',w1.VOORNAAM,w1.VOORVOEG,w1.ACHTERNAAM) wNaam ";
   $query .= 'FROM {ezac_Rooster} r, {ezac_Leden} w1, {ezac_Rooster_Diensten} d ';

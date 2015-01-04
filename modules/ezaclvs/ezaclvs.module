@@ -28,15 +28,19 @@ function ezaclvs_permission() {
   return array(
     'ezac_lvs_view' => array(
       'title' => t('EZAC LVS inzage'),
-      'description' => t('Bekijken EZAC leerling volgsysteem.'),
+      'description' => t('Inzage alle info EZAC Bevoegdheden en voortgangs administratie.'),
+    ),
+    'ezac_lvs_view_own' => array(
+      'title' => t('EZAC LVS inzage'),
+      'description' => t('Inzage eigen info EZAC Bevoegdheden en voortgangs administratie.'),
     ),
     'ezac_lvs_input' => array(
       'title' => t('EZAC LVS invoer'),
-      'description' => t('Invoer in EZAC leerling volgsysteem.'),
+      'description' => t('Invoer in EZAC Bevoegdheden en voortgangs administratie.'),
     ),
     'ezac_lvs_edit' => array(
       'title' => t('EZAC LVS wijziging'),
-      'description' => t('Wijzigen in EZAC leerling volgsysteem.'),
+      'description' => t('Wijzigen in EZAC Bevoegdheden en voortgangs administratie.'),
     ),
   );
 }
@@ -51,34 +55,44 @@ function ezaclvs_menu() {
   $jaar = date('Y');
   //build menu
   $items = array();
-    $items['lvs'] = array(
+    $items['lvs'] = array( 
     'title' => 'EZAC verslag',
-    'description'=> 'Aanmaken dagverslag',
+    'description'=> 'Bevoegdheden en Voortgang Administratie',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('ezaclvs_verslag_form'),
+    'page arguments' => array('ezaclvs_status_form'),
     'access callback' => 'user_access',
-    'access arguments' => array('ezac_lvs_input'),
+    'access arguments' => array('ezac_lvs_view'),
     'type' => MENU_NORMAL_ITEM
     ); 
+    $items['lvs/status'] = array( 
+    'title' => 'Status',
+    'description'=> 'Bevoegdheden en Voortgang Administratie',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ezaclvs_status_form'),
+    'access callback' => 'user_access',
+    'access arguments' => array('ezac_lvs_view'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+    ); 
   $items['lvs/verslag'] = array(
-    'title' => 'Invoer dagverslag',
+    'title' => 'Invoer verslag',
     'description'=> 'Aanmaken dagverslag',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('ezaclvs_verslag_form'),
     'access callback' => 'user_access',
     'access arguments' => array('ezac_lvs_input'),
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => 0, 
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1, 
     );
   $items['lvs/verslagen'] = array(
-    'title' => 'Overzicht verslagen',
+    'title' => 'Overzicht',
     'description'=> 'Overzicht dagverslagen',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('ezaclvs_verslagen_form'),
     'access callback' => 'user_access',
     'access arguments' => array('ezac_lvs_view'),
     'type' => MENU_LOCAL_TASK,
-    'weight' => 0, 
+    'weight' => 2, 
     );
   $items['lvs/persoon'] = array( 
     'title' => 'Invoer persoon',
@@ -88,37 +102,37 @@ function ezaclvs_menu() {
     'access callback' => 'user_access',
     'access arguments' => array('ezac_lvs_input'),
     'type' => MENU_LOCAL_TASK,
-    'weight' => 1,
+    'weight' => 3,
     );
   $items['lvs/overzicht'] = array(
       'title' => 'Overzicht persoon',
       'description'=> 'Overzicht bevoegdheden',
       'page callback' => 'drupal_get_form',
-      'page arguments' => array('ezaclvs_persoon_form', TRUE),
+      'page arguments' => array('ezaclvs_persoon_form', TRUE), //OVERZICHT = TRUE
       'access callback' => 'user_access',
       'access arguments' => array('ezac_lvs_view'),
       'type' => MENU_LOCAL_TASK,
-      'weight' => 2,
+      'weight' => 4,
     );
   $items['lvs/currency'] = array(
       'title' => 'Currency',
       'description'=> 'Currency rapportage LVS',
       'page callback' => 'drupal_get_form',
-      'page arguments' => array('ezaclvs_currency_form', TRUE),
+      'page arguments' => array('ezaclvs_currency_form'),
       'access callback' => 'user_access',
       'access arguments' => array('ezac_lvs_view'),
       'type' => MENU_LOCAL_TASK,
-      'weight' => 3,
+      'weight' => 5,
     );
   $items['lvs/tabel'] = array(
       'title' => 'Tabel',
-      'description'=> 'Tabel invoer bevoegdheden LVS',
+      'description'=> 'Tabel invoer bevoegdheden BVA',
       'page callback' => 'drupal_get_form',
-      'page arguments' => array('ezaclvs_tabel_form', TRUE),
+      'page arguments' => array('ezaclvs_tabel_form'),
       'access callback' => 'user_access',
       'access arguments' => array('ezac_lvs_input'),
       'type' => MENU_LOCAL_TASK,
-      'weight' => 4,
+      'weight' => 6,
     );
   $items['lvs/download'] = array(
       'title' => 'Download',
@@ -160,9 +174,9 @@ function theme_ezaclvs_form_table(&$variables) {
 
     // Setup the structure to be rendered and returned.
     $content = array(
-    '#theme' => 'table',
-    '#header' => $header,
-    '#rows' => array(),
+        '#theme' => 'table',
+        '#header' => $header,
+        '#rows' => array(),
     );
 
     // Traverse each row.  @see element_chidren().
@@ -203,6 +217,139 @@ function ezaclvs_get_bevoegdheden() {
   return $bevoegd;
 }
 
+
+/**
+* Voortgang en Bevoegdheid Administratie
+* Overzicht van de status (startscherm)
+* @returns array $form renderable BVA status information
+**/
+function ezaclvs_status_form($form, &$form_state) {
+    global $base_url;
+    //$namen = ezac_get_namen();
+    //$bevoegdheden = ezaclvs_get_bevoegdheden();
+    $datum_start = date('Y') ."-01-01";
+    $datum_eind = date('Y') ."-12-31";
+
+    $periode_list = array(
+        'seizoen' => 'dit seizoen',
+        'jaar' => '12 maanden',
+        'maand' => '1 maand',
+        'vandaag' => 'vandaag',
+        //'anders' => 'andere periode',
+    );
+    
+    $form = array();
+    $form['title'] = array(
+        '#type' => 'markup',
+        '#markup' => '<h1>Status Bevoegdheden en Voortgang Administratie</h1>', 
+        '#weight' => 1,     
+    );
+
+    $form['periode'] = array(
+    '#type' => 'select',
+    '#title' => 'Periode',
+    '#options' => $periode_list,
+    '#weight' => 2,
+    '#ajax' => array(
+        'callback' => 'ezaclvs_status_callback', 
+        'wrapper' => 'status-div',
+        'effect' => 'fade',
+        'progress' => array('type' => 'none'),
+        ),
+    );
+    
+    $periode = (isset($form_state['values']['periode']) && $form_state['values']['periode'])
+        ? $form_state['values']['periode']
+        : key($periode_list);
+    
+    switch ($periode) {
+        case 'vandaag' :
+            $datum_start = date('Y-m-d');
+            $datum_eind = date('Y-m-d');
+            break;
+        case 'maand' :
+            $datum_start = date('Y-m-d', mktime(0,0,0,date('n')-1,date('j'),date('Y')));
+            $datum_eind = date('Y-m-d'); //previous month
+            break;
+        case 'jaar' :
+            $datum_start = date('Y-m-d', mktime(0,0,0,date('n'),date('j'),date('Y')-1)); 
+            $datum_eind = date('Y-m-d'); //previous year
+            break;
+        case 'seizoen' :
+            $datum_start = date('Y') .'-01-01'; //this year
+            $datum_eind = date ('Y') .'-12-31';
+            break;
+        case 'anders' :
+            if (!isset($form_state['values']['datum_start'])) {
+                $datum = date('Y-m-d'); //default vandaag
+            }
+            else {
+                $datum_start = $form_state['values']['datum_start']; 
+                $datum_eind = $form_state['values']['datum_eind'];
+            }
+    }
+    
+    $dagverslagen = db_select('ezac_lvs_dagverslagen', 'd')
+        ->fields('d', array('id', 'datum', 'instructeur','weer','verslag','mutatie'))
+        ->condition('d.datum', array($datum_start, $datum_eind), 'BETWEEN')
+        ->execute()
+        ->fetchAll();
+    
+    $dagverslagen_lid = db_select('ezac_lvs_dagverslagen_lid', 'dl')
+        ->fields('dl', array('id', 'datum', 'afkorting', 'instructeur', 'verslag','mutatie'))
+        ->condition('dl.datum', array($datum_start, $datum_eind), 'BETWEEN')
+        ->execute()
+        ->fetchAll();
+
+        $bevoegdheid_lid = db_select('ezac_lvs_bevoegdheid_lid', 'bl')
+        ->fields('bl', array('id', 'afkorting', 'bevoegdheid', 'onderdeel', 'datum_aan', 'actief', 'instructeur','mutatie'))
+        ->condition('bl.datum_aan', array($datum_start, $datum_eind), 'BETWEEN')
+        ->condition('bl.actief', TRUE)
+        ->execute()
+        ->fetchAll();
+
+    $form['status'] = array(
+        '#type' => 'container',
+        '#prefix' => '<div id="status-div">',
+        '#suffix' => '</div>',
+        '#weight' => 3,
+    );
+
+    // Table tag attributes
+    $attributes = array(
+        'border'      => 1,
+        'cellspacing' => 0,
+        'cellpadding' => 5,
+        'width'	      => '80%',
+    );
+    
+    $header = array(
+        array('data' => 'status', 'width' => '30%'),
+        array('data' => 'aantal'), //, 'width' => 20
+    );
+    $rows = array(
+        array("<a href=$base_url/lvs/verslagen>Dagverslagen</a>", count($dagverslagen)),
+        array("<a href=$base_url/lvs/overzicht>Opmerkingen voor leden</a>", count($dagverslagen_lid)),
+        array("<a href=$base_url/lvs/tabel>Bevoegdheden voor leden</a>", count($bevoegdheid_lid)),
+    );
+
+    $form['status']['tabel'] = array(
+        '#theme' => 'table',
+        '#header' => $header,
+        '#rows' => $rows,
+        '#attributes' => $attributes,
+    );
+
+    return $form;
+}
+
+/**
+* ajax form update
+**/
+function ezaclvs_status_callback($form, $form_state) {
+    return $form['status'];
+}
+
 /**
 * Build dagrapport form.
 * @returns array $form renderable drupal form
@@ -217,11 +364,19 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
                          
     $namen = ezac_get_namen();
     $form['namen'] = array(
-    '#type' => 'value',
-    '#value' => $namen,
+        '#type' => 'value',
+        '#value' => $namen,
     );
     //$namen[''] = '<leeg>';
     //$namen['Onbekend'] = '<Onbekend>';
+    
+    $bevoegdheden = ezaclvs_get_bevoegdheden();
+    $bv_list[0] = '<Geen wijziging>';
+    if (isset($bevoegdheden)) {
+        foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+            $bv_list[$bevoegdheid] = $bevoegdheid_array['naam'];
+        }
+    }
   
     // find this year's flight days, descending
     $query = db_select('ezac_Starts', 's');
@@ -248,13 +403,9 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
     if (isset($starts)) {
         $form['datum'] = array(
         '#title' => t('Datum'),
-        //'#type' => 'date_popup', //extension to 'date'
-        //'#date_format' => 'Y-m-d',
-        //'#default_value' => $start['datum'],
         '#type' => 'select',
         '#options' => $start_dates,
         '#default_value' => $datum,  //most recent date
-        //'#description' => t('Datum'),
         '#weight' => 1,
         '#ajax' => array(
             'callback' => 'ezaclvs_verslag_callback', 
@@ -271,36 +422,36 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
     // present drop list with leden
     $afkorting = ezac_get_afkorting();
     
-  $form['instructeur'] = array(
-    '#title' => t('Instructeur / verantwoordelijke'),
-    '#type' => 'select',
-    '#options' => $namen,  //@TODO select only instructeur from namen
-    '#default_value' => $afkorting,
-    //'#description' => t('Instructeur of verantwoordelijke'),
-    '#weight' => 2,
-  );
-    
+    $form['instructeur'] = array(
+        '#title' => t('Instructeur / verantwoordelijke'),
+        '#type' => 'select',
+        '#options' => $namen,  //@TODO select only instructeur from namen
+        '#default_value' => $afkorting,
+        //'#description' => t('Instructeur of verantwoordelijke'),
+        '#weight' => 2,
+    );
+
     // textaera field for 'weer' (2 lines)
-  $form['weer'] = array(
-    '#title' => t('Weer en baanrichting'),
-    '#type' => 'textarea',
-    '#rows' => 2,
-    //'#default_value' => $verslag_waarde,
-    '#weight' => 3,
-    '#prefix' => '<div id="weer">',
-    '#suffix' => '</div>',
-  );
+    $form['weer'] = array(
+        '#title' => t('Weer en baanrichting'),
+        '#type' => 'textarea',
+        '#rows' => 2,
+        //'#default_value' => $verslag_waarde,
+        '#weight' => 3,
+        '#prefix' => '<div id="weer">',
+        '#suffix' => '</div>',
+    );
     // textarea field for 'verslag'  (10 lines)
-  $form['verslag'] = array(
-    '#title' => t('Algemeen verslag'),
-    '#type' => 'textarea',
-    '#rows' => 10,
-    //'#default_value' => $verslag,
-    '#required' => TRUE,  
-    '#weight' => 4,
-    '#prefix' => '<div id="verslag">',
-    '#suffix' => '</div>',
-  );
+    $form['verslag'] = array(
+        '#title' => t('Algemeen verslag'),
+        '#type' => 'textarea',
+        '#rows' => 10,
+        //'#default_value' => $verslag,
+        '#required' => TRUE,  
+        '#weight' => 4,
+        '#prefix' => '<div id="verslag">',
+        '#suffix' => '</div>',
+        );
     
     // generate form element with vliegers for the selected day
     // get starts->gezagvoerder, starts->tweede in $namen
@@ -327,72 +478,161 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
 
     //[vliegers] form wordt door AJAX opnieuw opgebouwd
     $form['vliegers'] = array(
-    '#title' => t('Opmerkingen per vlieger'),
-    '#type' => 'container',
-    '#weight' => 5,
-    '#prefix' => '<div id="vliegers-div">', //This section replaced by AJAX callback
-    '#suffix' => '</div>',
-    '#tree' => TRUE,
+        '#title' => t('Opmerkingen per vlieger'),
+        '#type' => 'container',
+        '#weight' => 5,
+        '#prefix' => '<div id="vliegers-div">', //This section replaced by AJAX callback
+        '#suffix' => '</div>',
+        '#tree' => TRUE,
     );
     
     //Toon eerdere verslagen per lid
     foreach ($vliegers as $afkorting => $helenaam) {
         // query lvs verslag, bevoegdheid records
-        // @TODO NOG UIT TE WERKEN
         $query = db_select('ezac_lvs_dagverslagen_lid', 'l');
         $query->fields('l', array('id', 'afkorting', 'instructeur', 'datum', 'verslag'));
         $query->condition('afkorting', $afkorting, '=');
         $verslagen = $query->execute()->fetchAll();
-        //dpm($verslagen, 'verslagen'); //debug
-        // put in table
     
-        if (!empty($verslagen)) { //create fieldset
+        $form['vliegers'][$afkorting] = array(
+            '#title' => $helenaam,
+            '#type'=> 'fieldset', 
+            '#required' => FALSE,
+            '#collapsible' => TRUE,
+            '#collapsed' => TRUE,
+            '#weight' => 5,
+            //'#tree' => TRUE,
+        );
+        
+        if (!empty($verslagen)) { 
+            //create fieldset
             $form['vliegers'][$afkorting]['verslagen'] = array(
-                '#title' => t("Eerdere verslagen voor $helenaam"),
+                '#title' => t("Eerdere opmerkingen voor $helenaam"),
+                '#type'=> 'fieldset', 
+                '#edit' => FALSE,
+                '#required' => FALSE,
+                '#collapsible' => TRUE,
+                '#collapsed' => TRUE,
+                '#weight' => 6,
+                '#tree' => TRUE,
+                );
+        
+            $header = array(
+                array('data' => 'datum', 'width' => '20%'),
+                array('data' => 'instructeur', 'width' => '20%'),
+                array('data' => 'opmerking'),
+            );
+            $rows = array();
+
+            foreach ($verslagen as $verslag) {
+                $rows[] = array(
+                    ezac_show_date($verslag->datum),
+                    $namen[$verslag->instructeur],
+                    nl2br($verslag->verslag),
+                );
+
+            }
+            $form['vliegers'][$afkorting]['verslagen']['tabel'] = array(
+                '#theme' => 'table',
+                '#header' => $header,
+                '#rows' => $rows,
+                '#empty' => t('Geen gegevens beschikbaar'),
+                //'#attributes' => $attributes,
+            );
+        } //!empty(verslagen)
+    //  list with persons who have flown that day - each may be selected
+    //   enter persoon_verslag 
+    //   possible entry of 'bevoegdheid' as of datum 
+    }
+    // @TODO SORT $vliegers
+    foreach ($vliegers as $afkorting => $helenaam) {
+
+        // invoeren opmerking
+        $form['vliegers'][$afkorting]['opmerking'] = array(
+            '#title' => t("Opmerkingen voor $helenaam"),
+            '#type' => 'textarea',
+            '#rows' => 3,
+            '#required' => FALSE,  
+            '#weight' => 5,
+            '#tree' => TRUE,
+        );
+        
+        //toon huidige bevoegdheden
+        // query lvs verslag, bevoegdheid records
+        $query = db_select('ezac_lvs_bevoegdheid_lid', 'b');
+        $query->fields('b', array('id', 'afkorting', 'instructeur', 'datum_aan', 
+                                  'bevoegdheid', 'actief', 'onderdeel', 'opmerking'));
+        $query->condition('afkorting', $afkorting, '=');
+        $query->condition('actief', TRUE, '=');
+        $vlieger_bevoegdheden = $query->execute()->fetchAll();
+        // put in table
+        $header = array(
+            array('data' => 'datum', 'width' => '20%'),
+            array('data' => 'instructeur', 'width' => '20%'),
+            array('data' => 'bevoegdheid'),
+        );
+        $rows = array();
+        
+        if (!empty($vlieger_bevoegdheden)) { //create fieldset
+            $form['vliegers'][$afkorting]['bevoegdheden'] = array(
+                '#title' => t("Bevoegdheden van $helenaam"),
                 '#type'=> 'fieldset',
                 '#edit' => FALSE,
                 '#required' => FALSE,
                 '#collapsible' => TRUE,
                 '#collapsed' => TRUE,
-                '#weight' => 5,
+                '#weight' => 7,
                 '#tree' => TRUE,
                 );
+            foreach ($vlieger_bevoegdheden as $bevoegdheid) {
+                $rows[] = array(
+                    ezac_show_date($bevoegdheid->datum_aan),
+                    $namen[$bevoegdheid->instructeur],
+                    $bevoegdheid->bevoegdheid .' - ' 
+                        .$bv_list[$bevoegdheid->bevoegdheid] .' '
+                        .nl2br($bevoegdheid->onderdeel)
+                );
             }
-
-        foreach ($verslagen as $verslag) {
-            //show as markup in form or textfield with edit=false
-            $form['vliegers'][$afkorting]['verslagen'][$verslag->id] = array(
-                '#title' => $verslag->datum,
-                '#markup' => '<p>' .ezac_show_date($verslag->datum) .' - '
-                .'Instructeur: ' .$namen[$verslag->instructeur] 
-                .'<br>' .$verslag->verslag //@TODO format with line breaks 
-                .'</p>',
-                '#tree' => TRUE,
-                '#weight' => 5,
+            $form['vliegers'][$afkorting]['bevoegdheden']['tabel'] = array(
+                '#theme' => 'table',
+                '#header' => $header,
+                '#rows' => $rows,
+                '#empty' => t('Geen gegevens beschikbaar'),
+                '#weight' => 7,
             );
-        }    
-    }
-    
-    //  list with persons who have flown that day - each may be selected
-    //   enter persoon_verslag 
-    //   possible entry of 'bevoegdheid' as of datum 
-    
-    // @TODO SORT $vliegers
-    foreach ($vliegers as $afkorting => $helenaam) {
+        }
 
-    // invoeren opmerking
-    $form['vliegers'][$afkorting]['opmerking'] = array(
-        '#title' => t("Opmerkingen voor $helenaam"),
-        '#type' => 'textarea',
-        '#rows' => 3,
-        '#required' => FALSE,  
-        '#weight' => 5,
-        '#tree' => TRUE,
-    );
-    // invoeren bevoegdheid - nested container with verslag / bevoegdheid?
-    // alternative is a button jumping to add bevoegdheid form
-        //$form['vliegers'][$naam]['bevoegdheid'] = array();
-        // @TODO select from drop list with known bevoegdheid values
+        //formatteer bevoegdheid en onderdeel in een tabel regel
+        $tabel_rows = array(
+            '#tree' => TRUE,
+            array(
+                'soort' => array(
+                    '#description' => 'Toekennen van een nieuwe bevoegdheid',
+                    '#type' => 'select',
+                    '#options' => $bv_list,
+                    '#default_value' => 0, //<Geen wijziging>
+                ),
+                'onderdeel' => array(
+                    '#description' => 'Bijvoorbeeld overland type',
+                    '#type' => 'textfield',
+                    '#required' => FALSE,
+                    '#default_value' => '',
+                ),
+            ),
+        );
+            
+        // bevoegdheid en onderdeel in tabel vormgeven
+        $form['vliegers'][$afkorting]['bevoegdheid'] = array(
+            // Theme this part of the form as a table.
+            '#theme' => 'ezaclvs_form_table',
+            '#header' => array('bevoegdheid', 'onderdeel'),
+            '#tree' => TRUE,
+            '#prefix' => "<div id='bevoegdheid-div'>",
+            '#suffix' => '</div>',
+            '#weight' => 10,
+            'rows' => $tabel_rows,
+        );
+        // einde invoeren bevoegdheid
     }
    
     //submit
@@ -403,7 +643,7 @@ function ezaclvs_verslag_form($form = NULL, &$form_state) {
     '#weight' => 99,
     );
 
-  return $form;
+    return $form;
 }
 
 /**
@@ -423,21 +663,18 @@ function ezaclvs_verslag_callback($form, $form_state) {
 function ezaclvs_verslag_form_validate($form, &$form_state) {
   if (!isset($form_state['values'])) return;
 
-    //dpm($form, 'form validate'); //debug
-    //dpm($form_state,'form_state validate'); //debug
-    
   //datum
   $dc = explode('-', $form_state['values']['datum']);
   if (!checkdate($dc[1], $dc[2], $dc[0])) form_set_error('datum', 'ongeldige datum');
 
-  
+    /* geen verwijderen functie aanwezig
   //confirm delete bij op == Verwijderen
   if (isset($form_state['values']['op'])) {
     if (($form_state['values']['op'] == 'Verwijderen') && ($form_state['values']['verwijderen'] == 0)) {
       form_set_error('verwijderen', 'Selecteer Verwijderen én druk op de knop Verwijderen om deze vlucht te ...');
       return;
     }
-  }
+  } */
 }
 
 /**
@@ -464,7 +701,8 @@ function ezaclvs_verslag_form_submit($form, &$form_state) {
             'verslag' => htmlentities($form_state['values']['verslag']),
         ))
         ->execute();
-        drupal_set_message("Dagverslag [$id] voor " .ezac_show_date($form_state['values']['datum']) .' aangemaakt', 'status');
+        drupal_set_message("Dagverslag [$id] voor " 
+                           .ezac_show_date($form_state['values']['datum']) .' aangemaakt', 'status');
     }
     //write verslag per vlieger
     foreach ($form_state['values']['vliegers'] as $afkorting => $verslag) {
@@ -479,8 +717,25 @@ function ezaclvs_verslag_form_submit($form, &$form_state) {
             ->execute();
             drupal_set_message('Verslag voor ' .$namen[$afkorting] .' aangemaakt', 'status');
         }
+        if ($verslag['bevoegdheid']['rows'][0]['soort'] != '0') {
+            //Bevoegdheid ingevoerd
+            $id = db_insert('ezac_lvs_bevoegdheid_lid')
+                ->fields(array(
+                    'bevoegdheid' => $verslag['bevoegdheid']['rows'][0]['soort'],
+                    'onderdeel' => htmlentities($verslag['bevoegdheid']['rows'][0]['onderdeel']),
+                    'datum_aan' => $form_state['values']['datum'],
+                    'afkorting' => $afkorting,
+                    'instructeur' => $form_state['values']['instructeur'],
+                    'actief' => TRUE,
+                ))
+                ->execute();
+                drupal_set_message('Bevoegdheid ' .$verslag['bevoegdheid']['rows'][0]['soort']
+                                   .' voor ' .$namen[$afkorting] .' aangemaakt', 'status');    
+        }
     }
 
+    //update bevoegdheden per vlieger
+    
     //mail verslag naar instructeurs
     $to = 'webmaster@ezac.nl'; //instructie@ezac.nl
     $mail_datum = ezac_show_date($form_state['values']['datum']);
@@ -586,13 +841,20 @@ function ezaclvs_verslagen_form($form, &$form_state) {
         ->condition('d.datum', $datum, $condition)
         ->execute()->fetchall();
     
+    $header = array(
+        array('data' => 'datum', 'width' => '20%'),
+        array('data' => 'verslag'),
+    );
+    $rows = array();
+
     foreach ($dagverslagen as $dagverslag) {
         $p_datum = ezac_show_date($dagverslag->datum);
         $p_weer = nl2br($dagverslag->weer);
         $p_verslag = nl2br($dagverslag->verslag);
+        $p_instructeur = $namen[$dagverslag->instructeur];
         $overzicht[$dagverslag->datum]['dagverslag'][$dagverslag->id] =
-            "<p><h3>$p_datum</h3> Weer: $p_weer<br>"
-            ."Verslag: $p_verslag</p>";
+            "Instructeur: $p_instructeur<br>Weer: $p_weer<br>"
+            ."Verslag: $p_verslag";
     }
     
     //lees dagverslagen_lid
@@ -607,7 +869,7 @@ function ezaclvs_verslagen_form($form, &$form_state) {
         $p_instr = $namen[$dl->instructeur];
         $p_verslag = nl2br($dl->verslag);
         $overzicht[$dl->datum]['dagverslag_lid'][$dl->id] =
-            "<p>$p_datum - Opmerking voor $p_naam: <br>$p_verslag ($p_instr)</p>";
+            "Opmerking voor $p_naam: <br>$p_verslag ($p_instr)</p>";
     }
     
     //lees bevoegdheid_lid
@@ -624,7 +886,7 @@ function ezaclvs_verslagen_form($form, &$form_state) {
         $p_onderdeel = nl2br($bl->onderdeel);
         $p_opmerking = nl2br($bl->opmerking);
         $overzicht[$bl->datum_aan]['bevoegdheid_lid'][$dl->id] =
-            "<p>$p_datum - Bevoegdheid voor $p_naam: <br>$bl->bevoegdheid $p_onderdeel $p_opmerking($p_instr)</p>";
+            "Bevoegdheid voor $p_naam: <br>$bl->bevoegdheid $p_onderdeel $p_opmerking($p_instr)</p>";
     }
     
     //display verslagen
@@ -634,28 +896,44 @@ function ezaclvs_verslagen_form($form, &$form_state) {
         foreach ($overzicht as $datum => $ovz) {
             if (isset($ovz['dagverslag'])) {
                 foreach ($ovz['dagverslag'] as $id => $verslag) {
-                    $p_overzicht .= $verslag;
+                    //$p_overzicht .= $verslag;
+                    $rows[] = array(
+                        ezac_show_date($datum),
+                        $verslag,
+                    );
                 }
             }
             if (isset($ovz['dagverslag_lid'])) {
                 foreach ($ovz['dagverslag_lid'] as $id => $verslag) {
-                    $p_overzicht .= $verslag;
+                    //$p_overzicht .= $verslag;
+                    $rows[] = array(
+                        ezac_show_date($datum),
+                        $verslag,
+                    );
                 }
             }
             if (isset($ovz['bevoegdheid_lid'])) {
                 foreach ($ovz['bevoegdheid_lid'] as $id => $verslag) {
-                    $p_overzicht .= $verslag;
+                    //$p_overzicht .= $verslag;
+                    $rows[] = array(
+                        ezac_show_date($datum),
+                        $verslag,
+                    );
                 }
             }
         }
     }
     
     $form['verslag'] = array(
-    '#type' => 'markup',
-    '#markup' => $p_overzicht,
-    '#weight' => 5,
-    '#prefix' => '<div id="verslagen-div">',
-    '#suffix' => '</div>',
+        '#type' => 'markup',
+        '#theme' => 'table',
+        '#header' => $header,
+        '#rows' => $rows,
+        '#empty' => t('Geen gegevens beschikbaar'),
+        //'#markup' => $p_overzicht,
+        '#weight' => 5,
+        '#prefix' => '<div id="verslagen-div">',
+        '#suffix' => '</div>',
     );
     
     return $form;
@@ -671,14 +949,15 @@ function ezaclvs_verslagen_callback($form, $form_state) {
 * Enter opmerking and/or bevoegdheid when $overzicht == FALSE
 * @param array $form
 * @param array &$form_state
-* @param boolean $overzicht FALSE: enter details, TRUE: overzicht
+* @param boolean $overzicht FALSE: enter details, TRUE: toon overzicht
 * @returns array $form renderable drupal form
 */
 function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     
     global $namen;
     global $bevoegdheden;
-    $namen = ezac_get_namen();
+    $namen = array('selecteer' => '<selecteer>');
+    $namen += ezac_get_namen();
     
     //instructeur  is logged-in user
     //get afkorting for logged-in user
@@ -687,7 +966,7 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     $form['titel']['#type'] = 'markup';
     $form['titel']['#markup'] = '<p><h2>Opmerkingen en bevoegdheden</h2></p>'; 
     $form['titel']['#weight'] = 0;
-
+    
     if (!$overzicht) {
         // make most recent day active
         // present as default date in dropdown list
@@ -710,6 +989,61 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
         '#weight' => 2,
         );
     }
+    else { //voor OVERZICHT, selecteer periode
+        $periode_list = array(
+            'seizoen' => 'dit seizoen',
+            'jaar' => '12 maanden',
+            'maand' => '1 maand',
+            'vandaag' => 'vandaag',
+            //'anders' => 'andere periode',
+        );
+
+        $form['periode'] = array(
+        '#type' => 'select',
+        '#title' => 'Periode',
+        '#options' => $periode_list,
+        '#weight' => 2,
+        '#ajax' => array(
+            'callback' => 'ezaclvs_verslag_callback', 
+            'wrapper' => 'vliegers-div',
+            'effect' => 'fade',
+            'progress' => array('type' => 'none'),
+            ),
+        );
+
+        $periode = (isset($form_state['values']['periode']) && $form_state['values']['periode'])
+            ? $form_state['values']['periode']
+            : key($periode_list);
+
+        switch ($periode) {
+            case 'vandaag' :
+                $datum_start = date('Y-m-d');
+                $datum_eind = date('Y-m-d');
+                break;
+            case 'maand' :
+                $datum_start = date('Y-m-d', mktime(0,0,0,date('n')-1,date('j'),date('Y')));
+                $datum_eind = date('Y-m-d'); //previous month
+                break;
+            case 'jaar' :
+                $datum_start = date('Y-m-d', mktime(0,0,0,date('n'),date('j'),date('Y')-1)); 
+                $datum_eind = date('Y-m-d'); //previous year
+                break;
+            case 'seizoen' :
+                $datum_start = date('Y') .'-01-01'; //this year
+                $datum_eind = date ('Y') .'-12-31';
+                break;
+            case 'anders' :
+                if (!isset($form_state['values']['datum_start'])) {
+                    $datum = date('Y-m-d'); //default vandaag
+                }
+                else {
+                    $datum_start = $form_state['values']['datum_start']; 
+                    $datum_eind = $form_state['values']['datum_eind'];
+                }
+        } ///switch
+        
+    } //else
+
         
     //select person
     $form['persoon'] = array(
@@ -736,166 +1070,189 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
     '#tree' => TRUE,
     );
 
-    $vlieger_afkorting = (isset($form_state['values']['persoon']) && ($form_state['values']['persoon'] <> ''))
-    ? $form_state['values']['persoon']
-    : key($namen); //top value as default
-    $helenaam = $namen[$vlieger_afkorting];
-    
-    $datum = (isset($form_state['values']['datum']) && ($form_state['values']['datum'] <> ''))
-    ? $form_state['values']['datum']
-    : date('Y-m-d'); //today as default
+    if (isset($form_state['values']['persoon']) && $form_state['values']['persoon'] != 'selecteer') {
+        $vlieger_afkorting = (isset($form_state['values']['persoon']) && ($form_state['values']['persoon'] <> ''))
+        ? $form_state['values']['persoon']
+        : key($namen); //top value as default
+        $helenaam = $namen[$vlieger_afkorting];
 
-    //toon vluchten dit jaar
-    //@TODO make view period as AJAX selectable in ezacstart_browse (this year, one month, 12 months)
-    $form['vliegers']['starts'] = ezacstart_browse(date('Y'), $vlieger_afkorting, TOTALS);
-    
-    if (!$overzicht) {
-        // invoeren opmerking
-        $form['vliegers']['opmerking'] = array(
-            '#title' => t("Opmerkingen voor $helenaam"),
-            '#type' => 'textarea',
-            '#rows' => 3,
-            '#required' => FALSE,  
-            '#weight' => 5,
-            '#tree' => TRUE,
+        $datum = (isset($form_state['values']['datum']) && ($form_state['values']['datum'] <> ''))
+        ? $form_state['values']['datum']
+        : date('Y-m-d'); //today as default
+
+        //toon vluchten dit jaar
+        //@TODO make view period as AJAX selectable in ezacstart_browse (this year, one month, 12 months)
+        if (isset($datum_start)) {
+            $form['vliegers']['starts'] = ezacstart_browse("$datum_start:$datum_eind", $vlieger_afkorting, TOTALS);
+        }
+        else $form['vliegers']['starts'] = ezacstart_browse(date('Y'), $vlieger_afkorting, TOTALS);
+
+        if (!$overzicht) {
+            // invoeren opmerking
+            $form['vliegers']['opmerking'] = array(
+                '#title' => t("Opmerkingen voor $helenaam"),
+                '#type' => 'textarea',
+                '#rows' => 3,
+                '#required' => FALSE,  
+                '#weight' => 5,
+                '#tree' => TRUE,
+            );
+        }
+
+        //Toon eerdere verslagen per lid
+        // query lvs verslag, bevoegdheid records
+        $query = db_select('ezac_lvs_dagverslagen_lid', 'l');
+        $query->fields('l', array('id', 'afkorting', 'instructeur', 'datum', 'verslag'));
+        $query->condition('afkorting', $vlieger_afkorting, '=');
+        if (isset($datum_start)) $query->condition('l.datum', array($datum_start, $datum_eind), 'BETWEEN');
+        $verslagen = $query->execute()->fetchAll();
+
+        // put in table
+        if (!empty($verslagen)) { //create fieldset
+            $form['vliegers']['verslagen'][$vlieger_afkorting] = array(
+                '#title' => t("Eerdere verslagen voor $helenaam"),
+                '#type'=> 'fieldset',
+                '#edit' => FALSE,
+                '#required' => FALSE,
+                '#collapsible' => TRUE,
+                '#collapsed' => !$overzicht,
+                '#weight' => 6,
+                '#tree' => TRUE,
+                );
+            }
+
+        $header = array(
+            array('data' => 'datum', 'width' => '20%'),
+            array('data' => 'instructeur', 'width' => '20%'),
+            array('data' => 'opmerking'),
         );
-    }
-    
-    //Toon eerdere verslagen per lid
-    // query lvs verslag, bevoegdheid records
-    $query = db_select('ezac_lvs_dagverslagen_lid', 'l');
-    $query->fields('l', array('id', 'afkorting', 'instructeur', 'datum', 'verslag'));
-    $query->condition('afkorting', $vlieger_afkorting, '=');
-    $verslagen = $query->execute()->fetchAll();
 
-    // put in table
-    if (!empty($verslagen)) { //create fieldset
-        $form['vliegers']['verslagen'][$vlieger_afkorting] = array(
-            '#title' => t("Eerdere verslagen voor $helenaam"),
-            '#type'=> 'fieldset',
-            '#edit' => FALSE,
+        foreach ($verslagen as $verslag) {
+            $rows = array();
+            foreach ($verslagen as $verslag) {
+                $rows[] = array(
+                    ezac_show_date($verslag->datum),
+                    $namen[$verslag->instructeur],
+                    nl2br($verslag->verslag),
+                );
+            }
+            $form['vliegers']['verslagen'][$vlieger_afkorting]['tabel'] = array(
+                '#theme' => 'table',
+                '#header' => $header,
+                '#rows' => $rows,
+                '#empty' => t('Geen gegevens beschikbaar'),
+                //'#attributes' => $attributes,
+            );
+        }    
+
+        $bevoegdheden = ezaclvs_get_bevoegdheden();
+        $bv_list[0] = '<Geen wijziging>';
+        if (isset($bevoegdheden)) {
+            foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+                $bv_list[$bevoegdheid] = $bevoegdheid_array['naam'];
+            }
+        }
+        //toon huidige bevoegdheden
+        // query lvs verslag, bevoegdheid records
+        // @TODO JOIN ezac_lvs_bevoegdheden bevoegdheid naam
+        $query = db_select('ezac_lvs_bevoegdheid_lid', 'b');
+        $query->fields('b', array('id', 'afkorting', 'instructeur', 'datum_aan', 
+                                  'bevoegdheid', 'actief', 'onderdeel', 'opmerking'));
+        $query->condition('afkorting', $vlieger_afkorting, '=');
+        $query->condition('actief', TRUE, '=');
+        $vlieger_bevoegdheden = $query->execute()->fetchAll();
+        // put in table
+
+        $header = array(
+            array('data' => 'datum', 'width' => '20%'),
+            array('data' => 'instructeur', 'width' => '20%'),
+            array('data' => 'bevoegdheid'),
+        );
+        $rows = array();
+        
+        if (!empty($vlieger_bevoegdheden)) { //create fieldset
+            $form['vliegers']['bevoegdheden'][$vlieger_afkorting] = array(
+                '#title' => t("Bevoegdheden voor $helenaam"),
+                '#type'=> 'fieldset',
+                '#edit' => FALSE,
+                '#required' => FALSE,
+                '#collapsible' => TRUE,
+                '#collapsed' => !$overzicht,
+                '#weight' => 7,
+                '#tree' => TRUE,
+                );
+            foreach ($vlieger_bevoegdheden as $bevoegdheid) {
+                //show as markup in form or textfield with edit=false
+                $rows[] = array(
+                    ezac_show_date($bevoegdheid->datum_aan),
+                    $namen[$bevoegdheid->instructeur],
+                    $bevoegdheid->bevoegdheid .' - ' 
+                        .$bv_list[$bevoegdheid->bevoegdheid] .' '
+                        .nl2br($bevoegdheid->onderdeel)
+                );
+            }
+            $form['vliegers']['bevoegdheden'][$vlieger_afkorting]['tabel'] = array(
+                '#theme' => 'table',
+                '#header' => $header,
+                '#rows' => $rows,
+                '#empty' => t('Geen gegevens beschikbaar'),
+                '#weight' => 7,
+            );
+        }
+
+        if (!$overzicht) {
+            //invoer bevoegdheid
+            $form['vliegers']['bevoegdheid'] = array(
+            '#title' => 'Bevoegdheid',
+            '#type' => 'container',
+            '#prefix' => '<div id="bevoegdheid-div">',
+            '#suffix' => '</div>',
             '#required' => FALSE,
             '#collapsible' => TRUE,
-            '#collapsed' => !$overzicht,
-            '#weight' => 6,
+            '#collapsed' => FALSE,
+            '#weight' => 10,
             '#tree' => TRUE,
             );
-        }
 
-    foreach ($verslagen as $verslag) {
-        //show as markup in form or textfield with edit=false
-        $form['vliegers']['verslagen'][$vlieger_afkorting][$verslag->id] = array(
-            '#title' => $verslag->datum,
-            '#markup' => '<p>' .ezac_show_date($verslag->datum) .' - '
-            .'Instructeur: ' .$namen[$verslag->instructeur] 
-            .'<br>' .nl2br($verslag->verslag)
-            .'</p>',
+            $form['vliegers']['bevoegdheid']['keuze'] = array(
+            '#title' => t('Bevoegdheid'),
+            '#type' => 'select',
+            '#options' => $bv_list,
+            '#default_value' => 0, //<Geen wijziging>
+            '#weight' => 10,
             '#tree' => TRUE,
-            '#weight' => 6,
-        );
-    }    
-    
-    $bevoegdheden = ezaclvs_get_bevoegdheden();
-    $bv_list[0] = '<Geen wijziging>';
-    if (isset($bevoegdheden)) {
-        foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
-            $bv_list[$bevoegdheid] = $bevoegdheid_array['naam'];
-        }
-    }
-    //toon huidige bevoegdheden
-    // query lvs verslag, bevoegdheid records
-    // @TODO JOIN ezac_lvs_bevoegdheden bevoegdheid naam
-    $query = db_select('ezac_lvs_bevoegdheid_lid', 'b');
-    $query->fields('b', array('id', 'afkorting', 'instructeur', 'datum_aan', 
-                              'bevoegdheid', 'actief', 'onderdeel', 'opmerking'));
-    $query->condition('afkorting', $vlieger_afkorting, '=');
-    $query->condition('actief', TRUE, '=');
-    $vlieger_bevoegdheden = $query->execute()->fetchAll();
-    // put in table
-    
-    if (!empty($vlieger_bevoegdheden)) { //create fieldset
-        $form['vliegers']['bevoegdheden'][$vlieger_afkorting] = array(
-            '#title' => t("Bevoegdheden voor $helenaam"),
-            '#type'=> 'fieldset',
-            '#edit' => FALSE,
-            '#required' => FALSE,
-            '#collapsible' => TRUE,
-            '#collapsed' => !$overzicht,
-            '#weight' => 7,
-            '#tree' => TRUE,
+            '#ajax' => array(
+                'callback' => 'ezaclvs_bevoegdheid_callback', 
+                'wrapper' => 'bevoegdheid-div',
+                'effect' => 'fade',
+                'progress' => array('type' => 'none'),
+                ), 
+            );
+
+            if (isset($form_state['values']['vliegers']['bevoegdheid']['keuze']) 
+                && ($form_state['values']['bevoegdheid']['keuze'] <> '0')) { 
+
+                $form['vliegers']['bevoegdheid']['onderdeel'] = array(
+                '#title' => t('Onderdeel'),
+                '#description' => 'Bijvoorbeeld overland type',
+                '#type' => 'textfield',
+                '#required' => FALSE,
+                '#default_value' => '',
+                '#weight' => 11,
+                '#tree' => TRUE,
+                );
+             }
+
+            //submit
+            $form['vliegers']['submit'] = array(
+            '#type' => 'submit',
+            '#description' => t('Opslaan'),
+            '#value' => t('Opslaan'),
+            '#weight' => 99,
             );
         }
-
-    foreach ($vlieger_bevoegdheden as $bevoegdheid) {
-        //show as markup in form or textfield with edit=false
-        $form['vliegers']['bevoegdheden'][$vlieger_afkorting][$bevoegdheid->id] = array(
-            '#title' => $bevoegdheid->datum_aan,
-            '#markup' => '<p>' .ezac_show_date($bevoegdheid->datum_aan) .' - '
-            .'Instructeur: ' .$namen[$bevoegdheid->instructeur] 
-            .'<br>' .$bevoegdheid->bevoegdheid .' - '
-            .$bv_list[$bevoegdheid->bevoegdheid] .' '
-            .nl2br($bevoegdheid->onderdeel) . ' '
-            .nl2br($bevoegdheid->opmerking)
-            .'</p>',
-            '#tree' => TRUE,
-            '#weight' => 7,
-        );
-    }    
-    
-    if (!$overzicht) {
-        //invoer bevoegdheid
-        $form['bevoegdheid'] = array(
-        '#title' => 'Bevoegdheid',
-        '#type' => 'container',
-        '#prefix' => '<div id="bevoegdheid-div">',
-        '#suffix' => '</div>',
-        '#required' => FALSE,
-        '#collapsible' => TRUE,
-        '#collapsed' => FALSE,
-        '#weight' => 10,
-        '#tree' => TRUE,
-        );
-
-        $form['bevoegdheid']['keuze'] = array(
-        '#title' => t('Bevoegdheid'),
-        '#type' => 'select',
-        '#options' => $bv_list,
-        '#default_value' => 0, //<Geen wijziging>
-        '#weight' => 10,
-        '#tree' => TRUE,
-        '#ajax' => array(
-            'callback' => 'ezaclvs_bevoegdheid_callback', 
-            'wrapper' => 'bevoegdheid-div',
-            'effect' => 'fade',
-            'progress' => array('type' => 'none'),
-            ), 
-        );
-
-        //@TODO het onderstaande if blok werkt niet.
-        if (isset($form_state['values']['bevoegdheid']['keuze']) 
-            && ($form_state['values']['bevoegdheid']['keuze'] <> '0')) { 
-
-            $form['bevoegdheid']['onderdeel'] = array(
-            '#title' => t('Onderdeel'),
-            '#description' => 'Bijvoorbeeld overland type',
-            '#type' => 'textfield',
-            '#required' => FALSE,
-            '#default_value' => '',
-            '#weight' => 11,
-            '#tree' => TRUE,
-            );
-         }
-
-        //submit
-        $form['submit'] = array(
-        '#type' => 'submit',
-        '#description' => t('Opslaan'),
-        '#value' => t('Opslaan'),
-        '#weight' => 99,
-        );
-    }
-
-  return $form;
+    } // if persoon != 'selecteer'
+    return $form;
 }
 
 /**
@@ -905,11 +1262,14 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
  * @return renderable array (the textfields element)
  */
 function ezaclvs_bevoegdheid_callback($form, $form_state) {
-    return $form['bevoegdheid'];
+    return $form['vliegers']['bevoegdheid'];
 }
 
 function ezaclvs_persoon_form_validate($form, &$form_state) {
     //@TODO verify that bevoegdheid is not given earlier
+    // als persoon is geselecteerd moet ook instructeur zijn geselecteerd
+    if ($form_state['values']['persoon'] != 'selecteer' && $form_state['values']['instructeur'] == 'selecteer')
+        form_set_error('instructeur','selecteer instructeur');
 }
     
 function ezaclvs_persoon_form_submit ($form, &$form_state) {
@@ -927,22 +1287,22 @@ function ezaclvs_persoon_form_submit ($form, &$form_state) {
         drupal_set_message('Verslag aangemaakt', 'status');
     }
     
-    if ($form_state['values']['bevoegdheid']['keuze'] <> '0') {
+    if ($form_state['values']['vliegers']['bevoegdheid']['keuze'] <> '0') {
         $id = db_insert('ezac_lvs_bevoegdheid_lid')
             ->fields(array(
                 'datum_aan' => $form_state['values']['datum'],
                 'afkorting' =>  $form_state['values']['persoon'],
                 'instructeur' => $form_state['values']['instructeur'],
-                'bevoegdheid' => $form_state['values']['bevoegdheid']['keuze'],
+                'bevoegdheid' => $form_state['values']['vliegers']['bevoegdheid']['keuze'],
                 'actief' => TRUE,
-                'onderdeel' => isset($form_state['values']['bevoegdheid']['onderdeel'])
-                    ? htmlentities($form_state['values']['bevoegdheid']['onderdeel'])
+                'onderdeel' => isset($form_state['values']['vliegers']['bevoegdheid']['onderdeel'])
+                    ? htmlentities($form_state['values']['vliegers']['bevoegdheid']['onderdeel'])
                     : '',
             ))
             ->execute();
         
         //adapt leerling, instructie and bevoegdheid values in ezac_Leden
-        ezaclvs_update_status($form_state['values']['bevoegdheid']['keuze'],
+        ezaclvs_update_status($form_state['values']['vliegers']['bevoegdheid']['keuze'],
                               $form_state['values']['persoon']);
 
         drupal_set_message('Bevoegdheid aangemaakt', 'status');
@@ -1018,7 +1378,7 @@ function ezaclvs_currency_form($form, &$form_state) {
     
     // form header info
     $form['titel']['#type'] = 'markup';
-    $form['titel']['#markup'] = "<p><h2>Currency rapportage Leerling volgsysteem</h2></p>"; 
+    $form['titel']['#markup'] = "<p><h2>Currency overzicht</h2></p>"; 
     $form['titel']['#weight'] = 0;
 
     // select report category: DBO, solist, VVO, GPL
@@ -1110,7 +1470,6 @@ function ezaclvs_currency_form($form, &$form_state) {
     // use report function from ezacstart module
     $form['rapport']['overzicht'] = ezacstart_report_table($datum, $leden);
     $form['rapport']['overzicht']['#tree'] = TRUE;
-    //$form['rapport']['overzicht']['#weight'] = 3;
 
     return $form;
 }
