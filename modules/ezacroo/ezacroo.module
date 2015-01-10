@@ -23,9 +23,13 @@
 */
 function ezacroo_permission() {
   return array(
-    'rooster' => array(
+    'ezac_rooster' => array(
       'title' => t('EZAC rooster'),
       'description' => t('Inzien EZAC dienstenrooster.'),
+    ),
+    'ezac_rooster_edit' => array(
+      'title' => t('EZAC rooster wijzigen'),
+      'description' => t('Wijzigen EZAC dienstenrooster.'),
     ),
   );
 }
@@ -108,6 +112,15 @@ function ezacroo_menu() {
     'type' => MENU_LOCAL_TASK,
     'weight' => 2,
   );
+  $items['rooster/create'] = array(
+    'title' => 'invoeren',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ezacroo_create_form', 2), //pass parameter 1 (datum)
+    'access callback' => 'user_access',
+    'access arguments' => array('rooster_edit'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 3,
+  );
   $items['rooster/select'] = array(
     'title' => 'Te ruilen dienst',
     'page callback' => 'ezacroo_select',
@@ -136,6 +149,50 @@ function ezacroo_menu() {
   //	}
   return $items;
 }
+
+/**
+ * Implementation of hook_theme.
+ */
+function ezacroo_theme() {
+  return array(
+    'ezacroo_form_table' => array(
+      // The renderable element is the form.
+      'render element' => 'form',
+    ),
+  );
+}
+
+
+/**
+ * Theme callback for the form table.
+ */
+function theme_ezacroo_form_table(&$variables) {
+    // Get the useful values.
+    $form = $variables['form'];
+    $rows = $form['rows'];
+    $header = $form['#header'];
+    // Setup the structure to be rendered and returned.
+    $content = array(
+        '#theme' => 'table',
+        '#header' => $header,
+        '#rows' => array(),
+    );
+
+    // Traverse each row.  @see element_chidren().
+    foreach (element_children($rows) as $row_index) {
+        $row = array();
+        // Traverse each column in the row.  @see element_children().
+        foreach (element_children($rows[$row_index]) as $col_index) {
+            // Render the column form element.
+            $row[] = drupal_render($rows[$row_index][$col_index]);
+        }
+    // Add the row to the table.
+    $content['#rows'][] = $row;
+    }
+    // Render the table and return.
+    return drupal_render($content);
+}
+
 
 /**
 * Callback function for rooster retrieve
@@ -177,7 +234,7 @@ function _ezacroo_rooster_retrieve($resource_id, $datum) {
     $ds = $datumStart;
     ezacservices_check_datum($datum_range[1], $datumStart, $datumEnd);
     $de = $datumEnd;
-    return ezacservices_find_rooster_by_date($ds, $de);
+    return ezacroo_find_rooster_by_date($ds, $de);
   }
   else { //single date
     ezacservices_check_datum($datum, $datumStart, $datumEnd);
@@ -228,6 +285,7 @@ function ezacroo_page($select = '') {
 
 
   global $user;
+  global $base_url;
   unset($AlleDienst);
 
   switch ($select) {
@@ -268,9 +326,9 @@ function ezacroo_page($select = '') {
   $query  = 'SELECT r.*, d.Omschrijving, ';
   $query .= "CONCAT_WS(' ',w1.VOORNAAM,w1.VOORVOEG,w1.ACHTERNAAM) wNaam ";
   $query .= 'FROM {ezac_Rooster} r, {ezac_Leden} w1, {ezac_Rooster_Diensten} d ';
-  if ($Alledagen) {
+  if (isset($Alledagen) && $Alledagen) {
     $query .= "WHERE r.Datum <> '' ";
-    drupal_set_message('AlleDagen geselecteerd'); //debug
+    //drupal_set_message('AlleDagen geselecteerd'); //debug
   }
   else {
     $query .= "WHERE r.Datum >= :Datum ";
@@ -338,7 +396,9 @@ function ezacroo_page($select = '') {
     if ($Datum <> $ActDatum) {
       if ($ActDatum <> "") { // einde vorige rij
         $row[] = array(
-          $ActDatum,
+          user_access('ezac_rooster_edit')
+            ? "<a href='$base_url/rooster/create/$ActDatum_link'>$ActDatum</a>"
+            : $ActDatum,
           $row_field['A'],
           $row_field['B'],
           $row_field['C'],
@@ -348,7 +408,8 @@ function ezacroo_page($select = '') {
       $row_field['B'] = '';
       $row_field['C'] = '';
       // print "<tr><td>" .$Datum ."</td>\n\t"; // nieuwe rij
-      $ActDatum = $Datum;
+      $ActDatum = $Datum; //DD-MM-YYYY
+        $ActDatum_link = substr($Datum,6,4) .substr($Datum,2,4) .substr($Datum,0,2); //YYYY-MM-DD
       $ActPeriode = "A";
       //print "<td>";
     }
@@ -384,10 +445,12 @@ function ezacroo_page($select = '') {
 
   // Produce last line
   $row[] = array(
-    $ActDatum,
-    $row_field['A'],
-    $row_field['B'],
-    $row_field['C'],
+      user_access('ezac_rooster_edit')
+        ? "<a href='$base_url/rooster/create/$ActDatum_link'>$ActDatum</a>"
+        : $ActDatum,
+      $row_field['A'],
+      $row_field['B'],
+      $row_field['C'],
   );
 
   //drupal_set_message(print_r($row)); // debug
@@ -884,3 +947,257 @@ function ezacroo_confirm_form_submit($form, &$form_state) {
  $form_state['redirect'] = 'rooster/change/' .$ednr .'/' .$ednr2;
  //ezacroo_change($ednr, $ednr2); //execute the change
 } //ezacroo_confirm_form_submit
+
+/**
+* Create rooster entries
+* @param string $datum YYYY-MM-DD
+**/
+function ezacroo_create_form($form, &$form_state, $datum_input) {
+    //sanitize $datum YYYY-MM-DD
+    $datum = substr(htmlspecialchars($datum_input),0,10);
+    if (!checkdate(substr($datum,5,2), substr($datum,8,2), substr($datum, 0,4))) {
+        unset($datum); //date invalid
+    }
+    $namen = ezac_get_namen();
+    // store namen_lijst in form for use in validate function
+    $form['namen'] = array(
+        '#type' => 'value',
+        '#value' => $namen,
+    );
+
+    //lees rooster definities
+    
+    //lees periodes
+    //ezac_rooster_periode id periode omschrijving
+    $periodes = db_select('ezac_rooster_periode', 'p')
+        ->fields('p', array('periode', 'omschrijving'))
+        ->execute()
+        ->fetchallkeyed();
+    //store header info for bevoegdheid reference in submit function
+    $form['periodes'] = array(
+        '#type' => 'value',
+        '#value' => $periodes, 
+    );
+        
+    //lees diensten
+    //ezac_rooster_diensten Id Dienst Omschrijving
+    $diensten['-'] = '-';
+    $diensten = $diensten + db_select('ezac_rooster_diensten', 'd')
+        ->fields('d', array('dienst', 'omschrijving'))
+        ->execute()
+        ->fetchallkeyed();
+    $form['diensten'] = array(
+        '#type' => 'value',
+        '#value' => $diensten,
+    );
+
+    //invoeren datum voor rooster
+    if (!isset($datum)) {
+        $datum = (isset($form_state['values']['datum']) && !empty($form_state['values']['datum']))
+            ? $form_state['values']['datum']
+            : date('Y-m-d'); //default is today
+    }
+    //date picker
+    $form['datum'] = array(
+        '#title' => t('Datum'),
+        '#type' => 'date_popup', //extension to 'date'
+        '#date_format' => 'Y-m-d',
+        '#default_value' => $datum,
+        '#weight' => 1,
+        '#ajax' => array(
+            'callback' => 'ezacroo_create_callback', 
+            'wrapper' => 'tabel-div',
+            'effect' => 'fade',
+            'progress' => array('type' => 'none'),
+            ),
+    );
+
+    //lees rooster voor geselecteerde datum
+    //ezac_rooster Id Datum Periode Dienst Naam Mutatie Geruild
+    $rooster = db_select('ezac_rooster', 'r')
+        ->fields('r', array('id', 'datum', 'periode', 'dienst', 'naam', 'mutatie', 'geruild'))
+        ->condition('datum', $datum)
+        ->execute()
+        ->fetchall();    
+
+    $diensten_value = array();
+    if (isset($rooster)) {
+        foreach ($rooster as $dr) {
+            $diensten_value[$dr->periode][$dr->naam]['id'] = $dr->id;
+            $diensten_value[$dr->periode][$dr->naam]['dienst'] = $dr->dienst;
+        }
+    }
+    //store current diensten values for submit comparison
+    $form['diensten_value'] = array(
+        '#type' => 'value',
+        '#value' => $diensten_value,
+    );
+        
+    //dpm($diensten_value,'diensten value'); //debug
+
+    //@TODO selecteer instructeur of overige diensten en maak subset van ledenlijst (ajax)
+    
+    //toon tabel met naam en per periode een kolom voor een select met diensten
+    //prepare header
+    $header = array('Naam');
+    foreach ($periodes as $periode => $omschrijving) {
+            array_push($header, $omschrijving);
+    }
+
+    //build rows array of column arrays
+    $rows = array(
+        '#tree' => TRUE,
+    );
+
+    $naam_index = 0;
+    foreach ($namen as $afkorting => $naam) {
+        //Start the row with the Naam
+        $row_value = array(
+                array(
+                    '#type' => 'markup',
+                    '#markup' => $naam,
+                    '#size' => 25,
+                    '#sticky' => TRUE, //this doesn't work
+                ),
+        );
+        $periode_index = 1;
+        foreach ($periodes as $periode => $omschrijving) {
+            //create dienst entry field for this periode for this $afkorting (person)
+            
+            $dw = (isset($diensten_value[$periode][$afkorting]['dienst']))
+                ? $diensten_value[$periode][$afkorting]['dienst']
+                : '-';
+            
+            $dienst_box = array(
+                '#type' => 'select',
+                '#options' => $diensten,
+                '#default_value' => $dw,
+            );
+            //reset #value in values and input table to display in the form
+            $form_state['values']['rows'][$naam_index][$periode_index] = $dw;
+            $form_state['input']['rows'][$naam_index][$periode_index] = $dw;
+            array_push($row_value, $dienst_box);
+            $periode_index++;
+        } //foreach $periodes
+        array_push($rows, $row_value);
+        $naam_index++;
+    } //foreach $namen
+    
+    //show table with dienst entry field for each periode record per naam
+    $form['table'] = array(
+    // Theme this part of the form as a table.
+        '#theme' => 'ezacroo_form_table',
+        '#header' => $header,
+        '#weight' => 5,
+        '#prefix' => '<div id="tabel-div">',
+        '#suffix' => '</div>',
+        // Rows in the form table.
+        'rows' => $rows,
+    );
+        
+    $form['submit'] = array(
+        '#type' => 'submit',
+        '#description' => t('Aanpassen van de diensten'),
+        '#value' => t('Invoeren'),
+        '#weight' => 99,
+    );
+    
+    return $form;
+} //ezacroo_create_form
+
+/**
+* AJAX update
+**/
+function ezacroo_create_callback($form, &$form_state) {
+    return $form['table'];
+}
+
+function ezacroo_create_form_validate($form, &$form_state) {
+} //ezacroo_create_form_validate
+
+function ezacroo_create_form_submit($form, &$form_state) {
+    //ezac_rooster Id Datum Periode Dienst Naam Mutatie Geruild
+    
+    $datum = $form_state['values']['datum'];
+    $namen = $form_state['values']['namen'];
+    $periodes = $form_state['values']['periodes'];
+    $diensten_value = $form_state['values']['diensten_value'];
+    $diensten = $form_state['values']['diensten'];
+    
+    $naam_index = 0;
+    foreach ($namen as $afkorting => $naam) {
+        $periode_index = 1;
+        foreach ($periodes as $periode => $omschrijving) {
+            //create dienst entry field for this periode for this $afkorting (person)
+            
+            $dw = (isset($diensten_value[$periode][$afkorting]['dienst']))
+                ? $diensten_value[$periode][$afkorting]['dienst']
+                : '-';
+            
+            $dienst = $form_state['values']['rows'][$naam_index][$periode_index];
+            
+            if ($dw != $dienst) { //dienst is veranderd
+                if ($dw == '-') { //dienst is nieuw ingevoerd (was eerst '-')
+                    //create dienst record
+                    $id = db_insert('ezac_rooster')
+                        ->fields(array(
+                            'Datum' => $datum,
+                            'Periode' => $periode,
+                            'Dienst' => $dienst,
+                            'Naam' => $afkorting,
+                            'Mutatie' => date('Y-m-d H:i:s'),
+                            'Geruild' => '',
+                        ))
+                        ->execute();
+                    drupal_set_message("Dienst $diensten[$dienst] $periode [$id] voor $naam aangemaakt");
+                }
+                elseif ($dienst == '-') {
+                    //dienst verwijderd (is nu '-')
+                    $id = $diensten_value[$periode][$afkorting]['id'];
+                    $num_deleted = db_delete('ezac_rooster')
+                        ->condition('id', $id, '=')
+                        ->execute();
+                    if ($num_deleted == 1) {
+                        drupal_set_message("Dienst $diensten[$dw] $periode [$id] voor $naam verwijderd");
+                    }
+                    else {
+                        drupal_set_message(
+                            "$num_deleted records voor Dienst $diensten[$dw] $periode [$id] voor $naam verwijderd",
+                            'error'
+                        );
+                    }
+                }
+                else {
+                    //dienst gewijzigd (was niet '-' en nu ook niet '-')
+                    $id = $diensten_value[$periode][$afkorting]['id'];
+                    $num_updated = db_update('ezac_rooster')
+                        ->condition('id', $id, '=')
+                        ->fields(array(
+                            'Datum' => $datum,
+                            'Periode' => $periode,
+                            'Dienst' => $dienst,
+                            'Naam' => $afkorting,
+                            'Mutatie' => date('Y-m-d H:i:s'),
+                            'Geruild' => '',
+                        ))
+                        ->execute();
+                    if ($num_updated == 1) {
+                        drupal_set_message("Dienst $diensten[$dw] $periode [$id] voor $naam gewijzigd in $diensten[$dienst] $periode");
+                    }
+                    else {
+                        drupal_set_message(
+                            "$num_deleted records voor Dienst $diensten[$dw] $periode [$id] voor $naam gewijzigd in $diensten[$dienst] $periode",
+                            'error'
+                        );
+                    }
+                } //else
+            } //if
+            
+            $periode_index++;
+        } //foreach $periodes
+        $naam_index++;
+    } //foreach $namen
+    //remain on the same page
+    $form_state['redirect'] = FALSE;
+    $form_state['rebuild'] = TRUE;
+} // ezacroo_create_form_submit
