@@ -969,7 +969,7 @@ function ezacroo_create_form($form, &$form_state, $datum_input) {
     
     //lees periodes
     //ezac_rooster_periode id periode omschrijving
-    $periodes = db_select('ezac_rooster_periode', 'p')
+    $periodes = db_select('ezac_Rooster_Periode', 'p')
         ->fields('p', array('periode', 'omschrijving'))
         ->execute()
         ->fetchallkeyed();
@@ -982,7 +982,7 @@ function ezacroo_create_form($form, &$form_state, $datum_input) {
     //lees diensten
     //ezac_rooster_diensten Id Dienst Omschrijving
     $diensten['-'] = '-';
-    $diensten = $diensten + db_select('ezac_rooster_diensten', 'd')
+    $diensten = $diensten + db_select('ezac_Rooster_Diensten', 'd')
         ->fields('d', array('dienst', 'omschrijving'))
         ->execute()
         ->fetchallkeyed();
@@ -1014,7 +1014,7 @@ function ezacroo_create_form($form, &$form_state, $datum_input) {
 
     //lees rooster voor geselecteerde datum
     //ezac_rooster Id Datum Periode Dienst Naam Mutatie Geruild
-    $rooster = db_select('ezac_rooster', 'r')
+    $rooster = db_select('ezac_Rooster', 'r')
         ->fields('r', array('id', 'datum', 'periode', 'dienst', 'naam', 'mutatie', 'geruild'))
         ->condition('datum', $datum)
         ->execute()
@@ -1139,7 +1139,7 @@ function ezacroo_create_form_submit($form, &$form_state) {
             if ($dw != $dienst) { //dienst is veranderd
                 if ($dw == '-') { //dienst is nieuw ingevoerd (was eerst '-')
                     //create dienst record
-                    $id = db_insert('ezac_rooster')
+                    $id = db_insert('ezac_Rooster')
                         ->fields(array(
                             'Datum' => $datum,
                             'Periode' => $periode,
@@ -1154,7 +1154,7 @@ function ezacroo_create_form_submit($form, &$form_state) {
                 elseif ($dienst == '-') {
                     //dienst verwijderd (is nu '-')
                     $id = $diensten_value[$periode][$afkorting]['id'];
-                    $num_deleted = db_delete('ezac_rooster')
+                    $num_deleted = db_delete('ezac_Rooster')
                         ->condition('id', $id, '=')
                         ->execute();
                     if ($num_deleted == 1) {
@@ -1170,7 +1170,7 @@ function ezacroo_create_form_submit($form, &$form_state) {
                 else {
                     //dienst gewijzigd (was niet '-' en nu ook niet '-')
                     $id = $diensten_value[$periode][$afkorting]['id'];
-                    $num_updated = db_update('ezac_rooster')
+                    $num_updated = db_update('ezac_Rooster')
                         ->condition('id', $id, '=')
                         ->fields(array(
                             'Datum' => $datum,
