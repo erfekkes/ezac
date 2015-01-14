@@ -105,35 +105,15 @@ function ezacpass_menu() {
       'type' => MENU_DEFAULT_LOCAL_TASK,
       'weight' => 0,
     );
-  $items['passagiers/vandaag'] = array(
-      'title' => 'Dag',
-      'description'=> 'Passagierslijst van vandaag',
-      'page callback' => '_ezacpass_dag',
-      'page arguments' => '',
+  $items['passagiers/display'] = array(
+      'title' => 'Lijst',
+      'description'=> 'Passagierslijst',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('ezacpass_display_form'),
       'access callback' => 'user_access',
       'access arguments' => array('ezac_pass_view'),
       'type' => MENU_LOCAL_TASK,
       'weight' => 1,
-    );
-  $items['passagiers/maand'] = array(
-      'title' => 'Maand',
-      'description'=> 'Passagiers per maand',
-      'page callback' => '_ezacpass_maand',
-      'page arguments' => '',
-      'access callback' => 'user_access',
-      'access arguments' => array('ezac_pass_view'),
-      'type' => MENU_LOCAL_TASK,
-      'weight' => 2,
-    );
-  $items['passagiers/jaar'] = array(
-      'title' => 'Jaar',
-      'description'=> 'Passagiers per jaar',
-      'page callback' => '_ezacpass_jaar',
-      'page arguments' => array(2), //jaar of starts record
-      'access callback' => 'user_access',
-      'access arguments' => array('ezac_pass_view'),
-      'type' => MENU_LOCAL_TASK,
-      'weight' => 3,
     );
   $items['passagiers/reserveer'] = array(
       'title' => 'Invoeren reservering',
@@ -262,12 +242,6 @@ function ezacpass_check_datum($datum, &$datumStart, &$datumEnd) {
 * @return array xml or json formatted list of ezac_Starts records
 */
 function _ezacpass_retrieve($resource_id, $datum) {
-  // Check permission
-  // TODO this may not be required
-  /*
-  if (!user_access('EZACservices starts retrieve')) {
-    return services_error('Unauthorized', 401);
-  } */
   // Check for mad values
 
     if ($resource_id <> '*') { // select specific record
@@ -615,8 +589,8 @@ function ezacpass_dagen_form($form, &$form_state) {
   $form[1]['#markup'] .= '<p>Geef de eerste zaterdag van de reeks op en het aantal weekends</p>';
   $form[1]['#weight'] = 3;
   
-  // find first weekend after date:
-  $first_date = date('Y-m-d',strtotime('saturday',strtotime('2014-04-13')));
+  // find first weekend after March 13 (two weeks into the season)
+  $first_date = date('Y-m-d',strtotime('saturday',strtotime(date('Y').'-04-13')));
   $form['serie_start'] = array(
     '#title' => t('Nieuwe datum serie vanaf zaterdag'),
     '#type' => 'textfield',
@@ -682,8 +656,6 @@ function ezacpass_dagen_form_validate($form, &$form_state) {
       else $checked = false;
       if (!empty($form_state['input']['dagenlist']) && $checked) {
         //remove dag
-        //drupal_set_message('delete dag ' .$form_state['input']['dagenlist']['dagen'][$i]); //debug
-        
         $num_deleted = db_delete('ezac_Passagiers_Dagen')
         ->condition('datum', $dag, '=')
         ->execute();
@@ -1719,26 +1691,64 @@ function _ezacpass_maand() {
   $datum = date('Y-m');
   return drupal_get_form('ezacpass_display_form', $datum);
 }
-function ezacpass_display_form($form, &$form_state, $datum) {
-  
-  //@TODO - inbouwen annuleringsfunctie (link of checkbox)
-  
-  //lees reserveringen uit ezac_Passagiers vanaf $datum
-  $reserveringen = _ezacpass_retrieve('*', $datum);
 
-  $form[0]['#type'] = 'markup';
-  $form[0]['#markup'] = "<p>Passagiers van $datum</p>";
-  $form[0]['#weight'] = 0;
-  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
-  $form[0]['#suffix'] = '</div>';
-  
+/***
+* passagiers per instelbare periode
+***/
+function ezacpass_display_form($form, &$form_state) {
+    
   $form[1]['#type'] = 'markup';
   $form[1]['#markup'] = "<p><h2>Klik op de tijd om een reservering te verwijderen</h2></p>";
   $form[1]['#weight'] = 1;
-//  $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
-//  $form[0]['#suffix'] = '</div>';
 
-  //  table header
+    $periode_list = array(
+        'vandaag' => 'vandaag',
+        'maand' => 'komende maand',
+        'seizoen' => 'dit seizoen',
+        'jaar' => 'afgelopen 12 maanden',
+        //'anders' => 'andere periode',
+    );
+
+    $form['periode'] = array(
+    '#type' => 'select',
+    '#title' => 'Periode',
+    '#options' => $periode_list,
+    '#weight' => 2,
+    '#ajax' => array(
+        'callback' => 'ezacpass_display_callback', 
+        'wrapper' => 'pass-div',
+        'effect' => 'fade',
+        'progress' => array('type' => 'none'),
+        ),
+    );
+
+    $periode = (isset($form_state['values']['periode']) && $form_state['values']['periode'])
+        ? $form_state['values']['periode']
+        : key($periode_list);
+
+    switch ($periode) {
+        case 'vandaag' :
+            $datum_start = date('Y-m-d');
+            $datum_eind = date('Y-m-d');
+            break;
+        case 'maand' :
+            $datum_start = date('Y-m-d');
+            $datum_eind = date('Y-m-d', mktime(0,0,0,date('n')+1,date('j'),date('Y'))); //previous month
+            break;
+        case 'jaar' :
+            $datum_start = date('Y-m-d', mktime(0,0,0,date('n'),date('j'),date('Y')-1)); 
+            $datum_eind = date('Y-m-d'); //previous year
+            break;
+        case 'seizoen' :
+            $datum_start = date('Y') .'-01-01'; //this year
+            $datum_eind = date ('Y') .'-12-31';
+            break;
+    } // switch
+    
+  //lees reserveringen uit ezac_Passagiers van $datum_start tot $datum_eind
+  $reserveringen = _ezacpass_retrieve('*', "$datum_start:$datum_eind");
+
+    //  table header
   // Table tag attributes
   $attributes = array(
     'border'      => 1,
@@ -1772,14 +1782,21 @@ function ezacpass_display_form($form, &$form_state, $datum) {
       $reservering->status,
     );
   }
-  $form[2]['#theme'] = 'table';
-  $form[2]['#attributes'] = $attributes;
-  $form[2]['#header'] = $header;
-  $form[2]['#rows'] = (isset($row)) ? $row : null;
-  $form[2]['#empty'] = t('Geen gegevens beschikbaar');
-  $form[2]['#weight'] = 2;
+  $form['table'] = array(
+      '#theme' => 'table',
+      '#attributes' => $attributes,
+      '#header' => $header,
+      '#rows' => (isset($row)) ? $row : null,
+      '#empty' => t('Geen gegevens beschikbaar'),
+      '#weight' => 3,
+      '#prefix' => '<div id="pass-div">',
+      '#suffix' => '</div>',
+  );
   return $form;
+}
 
+function ezacpass_display_callback($form, $form_state) {
+    return $form['table'];
 }
 
 function ezacpass_display_form_submit($form, &$form_state) {
@@ -1787,20 +1804,6 @@ function ezacpass_display_form_submit($form, &$form_state) {
 }
 
 
-/**
- * Sends a simple email.
- * [or] Tested on 2012-05-31 using Drupal 7.12
- *
- * Usage:
- * 1) Paste all the below code into your module or include
- * 2) Configure the two @FIXME's.
- * 3) Visit /_custom_simple_mail to get an email.
- *
- * Credits:
- * @see http://api.drupal.org/api/drupal/includes%21mail.inc/function/drupal_mail_system/7#comment-17489
- * @see http://www.midwesternmac.com/blogs/jeff-geerling/wrapper-function-simple
- *
- */
 /**
  * Send a simple email to specified recipient.
  *
@@ -1844,6 +1847,6 @@ function _ezacpass_mail($to, $message_subject, $message_body) {
     //drupal_set_message("Mail verzonden naar $to");
   }
   else {
-    drupal_set_message("Mail verzending naar $to [$subject] mislukt", 'error');
+    drupal_set_message("Mail verzending naar $to [$message_subject] mislukt", 'error');
   }
 }
