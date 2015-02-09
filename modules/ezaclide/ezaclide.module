@@ -117,7 +117,7 @@ $items = array();
 	$items['ledenbestand/edit'] = array(
 	  'title' => 'Wijzigen',
 	  'page callback' => 'ezaclide_edit', //ezaclide_edit function may be skipped
-	  'page arguments' => '',
+	  'page arguments' => array(2, 3), //voornaam, achternaam
 	  'access callback' => 'user_access',
 	  'access arguments' => array('ezac_edit'),
 	  'type' => MENU_LOCAL_TASK,
@@ -127,7 +127,7 @@ $items = array();
 	  'title' => 'Ledenbestand - Overzicht',
 	  'description' => 'Inzage in Leden bestand',
 	  'page callback' => 'ezaclide_browse',
-	  'page arguments' => array(2, 3), 
+	  'page arguments' => array(2, 3), //categorie, actief
 	  'access callback' => 'user_access',
 	  'access arguments' => array('ezac_edit'),
  	  'type' => MENU_CALLBACK,
@@ -159,13 +159,15 @@ return drupal_get_form('ezaclide_new_form');
 
 /**
 * Called when user goes to example.com/?q=ledenbestand/edit
+* @param text $voornaam
+* @param text $achternaam
 */
-function ezaclide_edit() {
+function ezaclide_edit($voornaam = NULL, $achternaam = NULL) {
   //drupal_set_message(t('Wijzigen lidgegevens'));
   $WijzigingSoort = WIJZIGING_SOORT_WIJZIGING;
   //unset($form_state['values']); //reset the form state to start value - WERKT NIET
 // Return the HTML generated from the $form data structure.
-return drupal_get_form('ezaclide_form');
+return drupal_get_form('ezaclide_form', $voornaam, $achternaam);
 }
 
 /**
@@ -449,9 +451,8 @@ function ezaclide_new_form_submit($form, &$form_state) {
 /**
 * Defines the Ledenlijst Naam selection form.
 */
-function ezaclide_form($form, &$form_state) { 
+function ezaclide_form($form, &$form_state, $voornaam, $achternaam) { 
   
-//  if ($form_state['values'] == NULL) {  // DIT WERKT NIET MEER - undefined index: values
   if (!isset($form_state['values'])) {  // Vervangen door ISSET functie
     // We're entering the form for the first time. Display the name selection dialogue
 	$stage = 'name';	// initial value = 'name' : name selection
@@ -467,7 +468,7 @@ function ezaclide_form($form, &$form_state) {
   switch ($stage) {
     case "name": {
 	  //drupal_set_message('Form stage "name"'); //DEBUG
-	  ezaclide_form_name($form, $form_state); //& removed
+	  ezaclide_form_name($form, $form_state, $voornaam, $achternaam); //& removed
 	  $form_state['rebuild'] = TRUE; //Zolang REBUILD waar is wordt niet naar submit gegaan
 	  break;
 	} // case
@@ -492,7 +493,7 @@ function ezaclide_form($form, &$form_state) {
 /**
 * Build NAME form.
 */
-function ezaclide_form_name(&$form = NULL, &$form_state) {
+function ezaclide_form_name(&$form = NULL, &$form_state, $voornaam, $achternaam) {
 
 // een AHAH javascript zou leuk zijn om automatisch in te vullen...
   //drupal_set_message('ezaclide_form_name');
@@ -500,11 +501,13 @@ function ezaclide_form_name(&$form = NULL, &$form_state) {
 	$form['zoekvoornaam'] = array(
 	'#title' => t('Voornaam'),
 	'#type' => 'textfield',
+        '#default_value' => $voornaam,
 	'#description' => t('Geef de gezochte voornaam'),
 	);
 	$form['zoekachternaam'] = array(
 	'#title' => t('Achternaam'),
 	'#type' => 'textfield',
+        '#default_value' => $achternaam,
 	'#description' => t('Geef de gezochte achternaam'),
 	);
 	$form['submit'] = array(
@@ -692,7 +695,7 @@ function ezaclide_form_edit(&$form = NULL, &$form_state) {
   '#size' => 1,
   '#weight' => 12);
   //GEBOORTEDA Datum/tijd 8
-  $gd = $lidrec['geboorteda'];
+  $gd = substr($lidrec['geboorteda'],0,10);
   if ($gd != NULL) {
 	  $lv = explode('-',$gd);
 	  $gebdat = sprintf('%s-%s-%s',$lv[2],$lv[1],$lv[0]);
@@ -731,7 +734,7 @@ function ezaclide_form_edit(&$form = NULL, &$form_state) {
   '#size' => 1,
   '#weight' => 15);
   //LID_VAN Datum/tijd 8
-  $ls = $lidrec['lid_van'];
+  $ls = substr($lidrec['lid_van'],0,10);
   if ($ls != NULL) {
 	  $lv = explode('-',$ls);
 	  $lid_van = sprintf('%s-%s-%s',$lv[2],$lv[1],$lv[0]);
@@ -749,7 +752,7 @@ function ezaclide_form_edit(&$form = NULL, &$form_state) {
   '#size' => 10,
   '#weight' => 16);
   //LID_EIND Datum/tijd 8
-  $le = $lidrec['lid_eind'];
+  $le = substr($lidrec['lid_eind'],0,10);
   if ($le != NULL) {
 	  $lv = explode('-',$le);
 	  $lid_eind = sprintf('%s-%s-%s',$lv[2],$lv[1],$lv[0]);
@@ -1195,6 +1198,7 @@ function ezaclide_form_validate($form, &$form_state) {
 
 /**
 * Search Leden table for Voornaam / Achternaam, return number of hits
+* @TODO modify for COUNT query
 */
 function ezaclide_search_name($Voornaam, $Achternaam, &$result) {
   // query database
@@ -1353,6 +1357,7 @@ function ezaclide_overzicht() {
   $header = array(
   array('data' => t('Actief')),
   array('data' => t('Vliegend Lid')),
+  array('data' => t('Tienritten kaart')),
   array('data' => t('Administratief Lid')),
   array('data' => t('Donateur')),
   array('data' => t('Donateur Bedrijf')),
@@ -1365,7 +1370,10 @@ function ezaclide_overzicht() {
   // VL = Vliegend Lid
   $query = "SELECT COUNT(*) FROM {ezac_Leden} WHERE Actief AND Code='VL'";
   $AantalVL = db_query($query)->fetchField();
-  //AL = Administratief Lid (donateur met stemrecht)
+    // TR = Tienrittenkaart
+  $query = "SELECT COUNT(*) FROM {ezac_Leden} WHERE Actief AND tienrittenkaart";
+  $AantalTR = db_query($query)->fetchField();
+    //AL = Administratief Lid (donateur met stemrecht)
   $query = "SELECT COUNT(*) FROM {ezac_Leden} WHERE Actief AND Code='AL'";
   $AantalAL = db_query($query)->fetchField();
   //DO = Donateur
@@ -1387,6 +1395,7 @@ function ezaclide_overzicht() {
   // zet in de tabel
   $row[] = array(t('Ja'),
     '<a href="?q=ledenbestand/browse/VL/1">' .$AantalVL .'</a>',
+    '<a href="?q=ledenbestand/browse/TR/1">' .$AantalTR .'</a>',
     '<a href="?q=ledenbestand/browse/AL/1">' .$AantalAL .'</a>',
     '<a href="?q=ledenbestand/browse/DO/1">' .$AantalDO .'</a>',
     '<a href="?q=ledenbestand/browse/DB/1">' .$AantalDB .'</a>',
@@ -1394,10 +1403,16 @@ function ezaclide_overzicht() {
     '<a href="?q=ledenbestand/browse/CL/1">' .$AantalCL .'</a>',
     '<a href="?q=ledenbestand/browse/BF/1">' .$AantalBF .'</a>');
 
+    //reset counters
+    $AantalVL = $AantalTR = $AantalAL = $AantalDO = $AantalDB = $AantalDB = $AantalOL = $AantalCL = $AantalBF = 0;
+    
   // Tel NIET ACTIEVE records per soort
   // VL = Vliegend Lid
   $query = "SELECT COUNT(*) FROM {ezac_Leden} WHERE Actief=0 AND Code='VL'";
   $AantalVL = db_query($query)->fetchField();
+  //TR = Tienrittenkaart
+  $query = "SELECT COUNT(*) FROM {ezac_Leden} WHERE Actief=0 AND tienrittenkaart";
+  $AantalAL = db_query($query)->fetchField();
   //AL = Administratief Lid (donateur met stemrecht)
   $query = "SELECT COUNT(*) FROM {ezac_Leden} WHERE Actief=0 AND Code='AL'";
   $AantalAL = db_query($query)->fetchField();
@@ -1421,6 +1436,7 @@ function ezaclide_overzicht() {
   $row[] = array(
     t('Nee'),
     '<a href="?q=ledenbestand/browse/VL/0">' .$AantalVL .'</a>',
+    '<a href="?q=ledenbestand/browse/TR/0">' .$AantalTR .'</a>',
     '<a href="?q=ledenbestand/browse/AL/0">' .$AantalAL .'</a>',
     '<a href="?q=ledenbestand/browse/DO/0">' .$AantalDO .'</a>',
     '<a href="?q=ledenbestand/browse/DB/0">' .$AantalDB .'</a>',
@@ -1434,7 +1450,7 @@ function ezaclide_overzicht() {
   $output[3]['#attributes'] = $attributes;
   $output[3]['#header'] = $header;
   $output[3]['#rows'] = $row;
-  $output[3]['#empty'] = t('Geen gegevens beschikbaar');
+  $output[3]['#empty'] = 'Geen gegevens beschikbaar';
   $output[3]['#weight'] = 3;
 	  
   return $output;	
@@ -1654,10 +1670,17 @@ function ezaclide_bestand_produce($filenaam = 'davilex.txt') {
 **/
 function ezaclide_browse($Code, $Actief) {
   unset ($tokens);
-  $query = 'SELECT * FROM {ezac_Leden} WHERE code=:Code AND actief= :Actief ORDER BY achternaam, postcode';
-  $tokens[':Code'] = $Code;
-  $tokens[':Actief'] = $Actief;
-  $result = db_query($query, $tokens);
+    if ($Code <> 'TR') {
+      $query = 'SELECT * FROM {ezac_Leden} WHERE code=:Code AND actief= :Actief ORDER BY achternaam, postcode';
+      $tokens[':Code'] = $Code;
+      $tokens[':Actief'] = $Actief;
+      $result = db_query($query, $tokens);
+    }
+    else { //TR = tienrittenkaart, hiervoor andere selectie uitvoeren
+      $query = 'SELECT * FROM {ezac_Leden} WHERE tienrittenkaart AND actief= :Actief ORDER BY achternaam, postcode';
+      $tokens[':Actief'] = $Actief;
+      $result = db_query($query, $tokens);
+    }
 
   //Toon aanwezige records
 
@@ -1679,13 +1702,18 @@ function ezaclide_browse($Code, $Actief) {
     array('data' => t('Code'))
   );
 
+    $row = array();
   while ($line = $result->fetchAssoc()) {
+      $voornaam = $line['voornaam'];
+      $achternaam = $line['achternaam'];
+      $voorvoeg = $line['voorvoeg'];
       $row[] = array(
-	$line['voornaam'] ." " .$line['voorvoeg'] ." " .$line['achternaam'],
-	$line['adres'] ."<br>" .$line['postcode'] ."  " .$line['plaats'] ."<br>" .$line['land'],
-	$line['telefoon'] ."<br>" .$line['mobiel'],
-	$line['e_mail'],
-	$line['code']);
+          "<a href=?q=ledenbestand/edit/$voornaam/$achternaam>$voornaam $voorvoeg $achternaam</a>",
+          //$line['voornaam'] ." " .$line['voorvoeg'] ." " .$line['achternaam'],
+        $line['adres'] ."<br>" .$line['postcode'] ."  " .$line['plaats'] ."<br>" .$line['land'],
+        $line['telefoon'] ."<br>" .$line['mobiel'],
+        $line['e_mail'],
+        $line['code']);
   } //while
 //  return theme('table', $header, $row, $attributes);
   $build = array(

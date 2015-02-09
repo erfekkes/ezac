@@ -590,39 +590,40 @@ function ezacstart_form_submit($form, &$form_state) {
       // DELETE record
       $resource .= "/$id";
       $options['method'] = 'DELETE';
-	$params = array(
-	  'datum' => $datum,
-	);
+	  $params = array(
+	    'datum' => $datum,
+	  );
     }
     else {
       //update record (PUT)
       $options['method'] = 'PUT';
       if (isset($id)) {
-	$resource .= "/$id.json";
-	//$resource .= $data; //replaced by $params
-	$params = array(
-	  'datum' => $datum,
-	  'registratie' => $registratie,
-	  'gezagvoerder' => $gezagvoerder,
-	  'tweede' => $tweede,
-	  'soort' => $soort,
-	  'startmethode' => $startmethode,
-	  'start' => $start,
-	  'landing' => $landing,
-	  'duur' => $duur,
-	  'instructie' => $instructie,
-	  'opmerking' => $opmerking,
-	);
+	   $resource .= "/$id.json";
+	   //$resource .= $data; //replaced by $params
+        $params = array(
+          'datum' => $datum,
+          'registratie' => $registratie,
+          'gezagvoerder' => $gezagvoerder,
+          'tweede' => $tweede,
+          'soort' => $soort,
+          'startmethode' => $startmethode,
+          'start' => $start,
+          'landing' => $landing,
+          'duur' => $duur,
+          'instructie' => $instructie,
+          'opmerking' => $opmerking,
+        );
       }
       else {
-	drupal_set_message("update error - no id", 'error');
-	return;
+	   drupal_set_message("update error - no id", 'error');
+	   return;
       }
     }
   }
   
   // send REST resource request
   //$result = drupal_http_request($resource, $options);
+    //drupal_set_message("resource [$resource]"); //debug
   $result = oAuthRequest($resource, $options['method'], $params);
  
   /* // not applicable with curl
@@ -631,11 +632,12 @@ function ezacstart_form_submit($form, &$form_state) {
     return; 
   }
   */
-  if ($result = null) {
-    return; //error
+  if ($result == null) { //geen Id waarde ontvangen
+      drupal_set_message('Fout bij aanmaken of wijzigen start','error');
+      return; //error
   }
   // return result
-  $message = ($new) ? 'Start is aangemaakt' : 'Start is bijgewerkt' ;
+  $message = ($new) ? "Start is aangemaakt [$result]" : "Start is bijgewerkt [$result]" ;
   if ($op == 'Verwijderen') $message = "Start $id op datum $datum is verwijderd";
   drupal_set_message($message);
   
@@ -684,6 +686,7 @@ function ezacstart_browse($datum, $afkorting = NULL, $details) {
  */
 function ezacstart_display($title, array $starts, $details) {
     // turn cache off
+    //dpm($starts, 'starts'); //debug
     drupal_add_http_header('Cache-control', 'no-cache');
     drupal_add_http_header('Pragma', 'no-cache'); //http 1.0
 
@@ -1479,6 +1482,13 @@ function ezacstart_report_table($datum, $list) {
         }
     }
 
+    // Table tag attributes
+    $attributes = array(
+        'border'      => 1,
+        'cellspacing' => 0,
+        'cellpadding' => 5,
+        'width'	  => '90%'
+    );
     // Table tag attributes
     $attributes = array(
         'border'      => 1,

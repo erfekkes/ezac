@@ -128,7 +128,6 @@ function oAuthRequest($req_url, $req_method, $params) {
   $consumer = new OAuthConsumer($key, $secret, NULL); 
   // Setup OAuth request
   //$api_endpoint = 'https://www.mydrupalsite.com/my_endpoint/resource_name';
-  //$api_endpoint = "$base_url/api/starts.json";
   $api_endpoint = $req_url;
   //$params = array('param1' => 'value1');
   $request = OAuthRequest::from_consumer_and_token($consumer, NULL, $req_method, $api_endpoint, $params);
@@ -168,15 +167,11 @@ function oAuthRequest($req_url, $req_method, $params) {
       break;
   }
   $response = curl_exec($curl);
-  //dpm($req_url); //DEBUG
-  //dpm($req_method);
-  //dpm($params);
-  //dpm($response);
   //insert error handling
   if (!$response) {
     //error
-    $err_txt = curl_error;
-    $err_no = curl_errno;
+    $err_txt = curl_error($curl);
+    $err_no = curl_errno($curl);
     drupal_set_message("error $err_txt ($err_no) for $url", 'error');
     return;
   }

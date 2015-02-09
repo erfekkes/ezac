@@ -877,7 +877,8 @@ function ezacservices_index_starts_by_date($datumStart, $datumEnd, $naam, $regis
         $index[$datum]++; // increment value for each record
     }
   }
-  return $index;
+  if (isset($index)) return $index;
+  else return null;
 }
 
 /**

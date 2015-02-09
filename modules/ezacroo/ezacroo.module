@@ -444,17 +444,16 @@ function ezacroo_page($select = '') {
   } // while
 
   // Produce last line
-  $row[] = array(
-      user_access('ezac_rooster_edit')
-        ? "<a href='$base_url/rooster/create/$ActDatum_link'>$ActDatum</a>"
-        : $ActDatum,
-      $row_field['A'],
-      $row_field['B'],
-      $row_field['C'],
-  );
+    if isset($ActDatum) 
+        $row[] = array(
+            user_access('ezac_rooster_edit')
+            ? "<a href='$base_url/rooster/create/$ActDatum_link'>$ActDatum</a>"
+                : $ActDatum,
+          $row_field['A'],
+          $row_field['B'],
+          $row_field['C'],
+      );
 
-  //drupal_set_message(print_r($row)); // debug
- 
   //return theme('table', $header, $row, $attributes);
   $build = array(
     'content' => array(

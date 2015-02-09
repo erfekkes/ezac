@@ -798,7 +798,7 @@ function ezacreserveer_show_date($datum) {
  */
 function _ezacreserveer_reserveer() {
   //toon lijst met beschikbare datums vanaf vandaag of eerste datum, per maand
-  $datum = date('Y-m-d',strtotime('Saturday')); //next saturday
+  $datum = date('Y-m-d',strtotime('Saturday')); 
   return drupal_get_form('ezacreserveer_reserveer_form', $datum);
 }
 
@@ -818,7 +818,8 @@ function ezacreserveer_reserveer_form($form, &$form_state, $datum) {
   unset($date_list);
   //zoek volgende vliegdag in dienstenrooster
   $today = date('Y-m-d');
-  $lastday = date('Y-m-d', strtotime("$today +1 week")); //one week period
+  $lastday = date('Y-m-d', strtotime("$today +1 week")-43200); //one week period - 12 hours
+    //$date->sub(new DateInterval('P12H'));
   $days = db_select('ezac_Rooster', 'r')
   ->condition('r.Datum', $today, '>=')
   ->condition('r.Datum', $lastday, '<=')

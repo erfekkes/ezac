@@ -172,7 +172,7 @@ function ezaclid_name_form_submit($form, &$form_state) {
 * redirected from ezaclid_name_form_submit
 */
 function ezaclid_display_page($Voornaam = "", $Achternaam ="") {
-
+  global $base_url; //for reference to foto dir
   // Verwijder voorvoegsels
   if (strrchr($Achternaam, " ")) $Achternaam = trim(strrchr ($Achternaam, " "));
 
@@ -241,7 +241,7 @@ function ezaclid_display_page($Voornaam = "", $Achternaam ="") {
        if ($Naam <> "") $Naam .= " ";
        $Naam .= $line["ACHTERNAAM"];
        }
-        $Foto1 = "/drupal/pics/leden/" .$Naam . ".jpg";
+        $Foto1 = "$base_url/pics/leden/$Naam.jpg";
 	if (isset($line["VOORNAAM"]))
 		$helenaam = $line["VOORNAAM"];
 	else
@@ -262,15 +262,17 @@ function ezaclid_display_page($Voornaam = "", $Achternaam ="") {
 	  $foto .= '" width="60">';
     } //if
 	else {
-		$Foto1 = "/drupal/pics/leden/" .$Naam . ".JPG";
+		$Foto1 = "$base_url/pics/leden/$Naam.JPG";
 		if (file_exists($Foto1)) {
       		$foto  = '<img src="';
 	  		$foto .= $Foto1;
 	  		$foto .= '" width="60">';
       	        } //if
       	        else {
+                    drupal_set_message("Foto $Foto1 niet gevonden"); //debug
                } //else
 	} //else
+      drupal_set_message("foto[$Foto1]"); //debug
     $row[] = array(
          $helenaam,
          $adres .'<br>' .$postcode .'  ' .$plaats .'<br>' .$land,
@@ -423,7 +425,7 @@ function ezaclid_etiket_produce($selectie = 'clubblad', $sortering = 'adres') {
 
   // data header for CSV attachment
   $mess  = ('"Naam";"Adres";"Postcode";"Plaats";"Land";"Telefoon";"E-mail";"Code";"Geboorteda"' .$CRLF);
-  $mess .= ('"EZAC leden";"' .$selectie .'";"";"' .date("Y-m-d", mktime()) .'";"";"";"";""' .$CRLF);
+  $mess .= ('"EZAC leden";"' .$selectie .'";"";"' .date("Y-m-d") .'";"";"";"";""' .$CRLF);
 
   //execute query
   //echo $query1 .$query2 .$query3;

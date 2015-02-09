@@ -57,7 +57,7 @@ function ezaclvs_menu() {
   $items = array();
     $items['lvs'] = array( 
     'title' => 'EZAC verslag',
-    'description'=> 'Bevoegdheden en Voortgang Administratie',
+    'description'=> 'Vorderingen en Bevoegdheden Administratie',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('ezaclvs_status_form'),
     'access callback' => 'user_access',
@@ -66,7 +66,7 @@ function ezaclvs_menu() {
     ); 
     $items['lvs/status'] = array( 
     'title' => 'Status',
-    'description'=> 'Bevoegdheden en Voortgang Administratie',
+    'description'=> 'Vorderingen en Bevoegdheden Administratie',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('ezaclvs_status_form'),
     'access callback' => 'user_access',
@@ -241,7 +241,7 @@ function ezaclvs_status_form($form, &$form_state) {
     $form = array();
     $form['title'] = array(
         '#type' => 'markup',
-        '#markup' => '<h1>Status Bevoegdheden en Voortgang Administratie</h1>', 
+        '#markup' => '<h1>Status Vorderingen en Bevoegdheden Administratie</h1>', 
         '#weight' => 1,     
     );
 
@@ -1118,7 +1118,6 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
         : date('Y-m-d'); //today as default
 
         //toon vluchten dit jaar
-        //@TODO make view period as AJAX selectable in ezacstart_browse (this year, one month, 12 months)
         if (isset($datum_start)) {
             $form['vliegers']['starts'] = ezacstart_browse("$datum_start:$datum_eind", $vlieger_afkorting, TOTALS);
         }
@@ -1156,15 +1155,13 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
                 '#weight' => 6,
                 '#tree' => TRUE,
                 );
-            }
 
-        $header = array(
-            array('data' => 'datum', 'width' => '20%'),
-            array('data' => 'instructeur', 'width' => '20%'),
-            array('data' => 'opmerking'),
-        );
+            $header = array(
+                array('data' => 'datum', 'width' => '20%'),
+                array('data' => 'instructeur', 'width' => '20%'),
+                array('data' => 'opmerking'),
+            );
 
-        foreach ($verslagen as $verslag) {
             $rows = array();
             foreach ($verslagen as $verslag) {
                 $rows[] = array(
@@ -1180,7 +1177,7 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
                 '#empty' => t('Geen gegevens beschikbaar'),
                 //'#attributes' => $attributes,
             );
-        }    
+        }
 
         $bevoegdheden = ezaclvs_get_bevoegdheden();
         $bv_list[0] = '<Geen wijziging>';
@@ -1273,6 +1270,7 @@ function ezaclvs_persoon_form($form, &$form_state, $overzicht = FALSE) {
                 '#title' => t('Onderdeel'),
                 '#description' => 'Bijvoorbeeld overland type',
                 '#type' => 'textfield',
+                '#maxlength' => 30,
                 '#required' => FALSE,
                 '#default_value' => '',
                 '#weight' => 11,
@@ -1360,39 +1358,39 @@ function ezaclvs_update_status($bevoegdheid, $afkorting) {
         ->execute()->fetchField();
 
     switch ($status)  { //change leerling and instructie status
-        case '1':   $num_updated = db_update('ezac_leden') //DBO
+        case '1':   $num_updated = db_update('ezac_Leden') //DBO
                                  ->fields(array('leerling' => 1))
                                  ->condition('afkorting', $afkorting, '=')
                                  ->execute();
                     break;
-        case '2':   $num_updated = db_update('ezac_leden') //SOLO
+        case '2':   $num_updated = db_update('ezac_Leden') //SOLO
                                  ->fields(array('leerling' => 1))
                                  ->condition('afkorting', $afkorting, '=')
                                  ->execute();
                     break;
-        case '3':   $num_updated = db_update('ezac_leden') //GPL
+        case '3':   $num_updated = db_update('ezac_Leden') //GPL
                                  ->fields(array('leerling' => 0))
                                  ->condition('afkorting', $afkorting, '=')
                                  ->execute();
                     break;
-        case '4':   $num_updated = db_update('ezac_leden') //Instructeur
+        case '4':   $num_updated = db_update('ezac_Leden') //Instructeur
                                  ->fields(array('instructie' => 1))
                                  ->condition('afkorting', $afkorting, '=')
                                  ->execute();
                     break;
-        case '5':   $num_updated = db_update('ezac_leden') //Examinator
+        case '5':   $num_updated = db_update('ezac_Leden') //Examinator
                                  ->fields(array('instructie' => 1))
                                  ->condition('afkorting', $afkorting, '=')
                                  ->execute();
                     break;
     }
     
-    $hoogste_bevoegdheid = db_select('ezac_leden', 'l')
+    $hoogste_bevoegdheid = db_select('ezac_Leden', 'l')
         ->condition('l.afkorting', $afkorting, '=')
         ->fields('l', array('bevoegdheid'))
         ->execute()->fetchfield();
     if ($status > $hoogste_bevoegdheid) {
-        $num_updated = db_update('ezac_leden') //update bevoegdheid
+        $num_updated = db_update('ezac_Leden') //update bevoegdheid
             ->fields(array('bevoegdheid' => $status))
             ->condition('afkorting', $afkorting, '=')
             ->execute();
@@ -1406,7 +1404,7 @@ function ezaclvs_update_status($bevoegdheid, $afkorting) {
 * @returns array $form renderable drupal form
 */
 function ezaclvs_currency_form($form, &$form_state) {
-
+    $namen = ezac_get_namen();
     $bevoegdheden = ezaclvs_get_bevoegdheden();
     foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
         //@TODO verwijder bevoegdheden met status=0 uit de lijst?
@@ -1440,6 +1438,7 @@ function ezaclvs_currency_form($form, &$form_state) {
         'jaar' => 'afgelopen 12 maanden',
         'vandaag' => 'vandaag',
     );
+    
     $form['periode'] = array(
     '#title' => t('Periode'),
     '#type' => 'select',
@@ -1461,15 +1460,21 @@ function ezaclvs_currency_form($form, &$form_state) {
     switch ($periode) {
         case 'maand' :
             $datum = array(date('Y-m-d', mktime(0,0,0,date('n')-1,date('j'),date('Y'))), date('Y-m-d')); //previous month
+            $datum_start = date('Y-m-d', mktime(0,0,0,date('n')-1,date('j'),date('Y')));
+            $datum_eind = date('Y-m-d');
             break;
         case 'seizoen' :
             $datum = array(date('Y').'-01-01', date('Y-m-d')); // from Jan 1st this year
+            $datum_start = date('Y').'-01-01';
+            $datum_eind = date('Y-m-d');
             break;
         case 'jaar' :
             $datum = array(date('Y-m-d', mktime(0,0,0,date('n'),date('j'),date('Y')-1)), date('Y-m-d')); //previous year
+            $datum_start = date('Y-m-d', mktime(0,0,0,date('n'),date('j'),date('Y')-1));
+            $datum_eind = date('Y-m-d');
             break;
         case 'vandaag' :
-            $datum = date('Y-m-d'); //previous year
+            $datum = $datum_start = $datum_eind = date('Y-m-d'); //today
             break;
     } //switch
     
@@ -1487,10 +1492,10 @@ function ezaclvs_currency_form($form, &$form_state) {
     //create report
     
     $selectie = (isset($form_state['values']['selectie']))
-        ? $form_state['values']['selectie']
-        : key($lijst);
+        ? $form_state['values']['selectie'] //de gekozen bevoegdheid
+        : key($lijst); //de eerste bevoegdheid uit de lijst
 
-    // select target group from ezac_leden
+    // select target group from ezac_Leden
     $leden = array();
 
     $query = db_select('ezac_Leden', 'l');
@@ -1504,10 +1509,116 @@ function ezaclvs_currency_form($form, &$form_state) {
             ->execute()->fetchAllKeyed(0, 1);
 
     // build report details
-    // use report function from ezacstart module
+    // use report function from ezacstart module - for recent starts
     $form['rapport']['overzicht'] = ezacstart_report_table($datum, $leden);
     $form['rapport']['overzicht']['#tree'] = TRUE;
+    
+    // add bevoegdheid updates from the selected period
 
+/*** add verslagen & bevoegdheid here ***/  
+    foreach ($leden as $vlieger_afkorting => $bevoegdheid) { 
+        $helenaam = $namen[$vlieger_afkorting];
+        //Toon eerdere verslagen per lid
+        // query lvs verslag, bevoegdheid records
+        $query = db_select('ezac_lvs_dagverslagen_lid', 'l');
+        $query->fields('l', array('id', 'afkorting', 'instructeur', 'datum', 'verslag'));
+        $query->condition('afkorting', $vlieger_afkorting, '=');
+        if (isset($datum_start)) $query->condition('l.datum', array($datum_start, $datum_eind), 'BETWEEN');
+        $verslagen = $query->execute()->fetchAll();
+
+        // put in table
+        if (!empty($verslagen)) { //create fieldset
+            $form['rapport']['VBA'][$vlieger_afkorting]['verslagen'] = array(
+                '#title' => t("Verslagen voor $helenaam"),
+                '#type'=> 'fieldset',
+                '#edit' => FALSE,
+                '#required' => FALSE,
+                '#collapsible' => TRUE,
+                '#collapsed' => TRUE,
+                //'#weight' => 6,
+                '#tree' => TRUE,
+                );
+
+            $header = array(
+                array('data' => 'datum', 'width' => '20%'),
+                array('data' => 'instructeur', 'width' => '20%'),
+                array('data' => 'opmerking'),
+            );
+
+            $rows = array();
+            foreach ($verslagen as $verslag) {
+                $rows[] = array(
+                    ezac_show_date($verslag->datum),
+                    $namen[$verslag->instructeur],
+                    nl2br($verslag->verslag),
+                );
+            }
+            $form['rapport']['VBA'][$vlieger_afkorting]['verslagen']['tabel'] = array(
+                '#theme' => 'table',
+                '#header' => $header,
+                '#rows' => $rows,
+                '#empty' => t('Geen gegevens beschikbaar'),
+                //'#attributes' => $attributes,
+            );
+        }
+
+        $bevoegdheden = ezaclvs_get_bevoegdheden();
+        $bv_list[0] = '<Geen wijziging>';
+        if (isset($bevoegdheden)) {
+            foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+                $bv_list[$bevoegdheid] = $bevoegdheid_array['naam'];
+            }
+        }
+        //toon huidige bevoegdheden
+        // query lvs verslag, bevoegdheid records
+        // @TODO JOIN ezac_lvs_bevoegdheden bevoegdheid naam
+        $query = db_select('ezac_lvs_bevoegdheid_lid', 'b');
+        $query->fields('b', array('id', 'afkorting', 'instructeur', 'datum_aan', 
+                                  'bevoegdheid', 'actief', 'onderdeel', 'opmerking'));
+        $query->condition('afkorting', $vlieger_afkorting, '=');
+        $query->condition('actief', TRUE, '=');
+        $vlieger_bevoegdheden = $query->execute()->fetchAll();
+        // put in table
+
+        $header = array(
+            array('data' => 'datum', 'width' => '20%'),
+            array('data' => 'instructeur', 'width' => '20%'),
+            array('data' => 'bevoegdheid'),
+        );
+        $rows = array();
+        
+        if (!empty($vlieger_bevoegdheden)) { //create fieldset
+            $form['rapport']['VBA'][$vlieger_afkorting]['bevoegdheid'] = array(
+                '#title' => t("Bevoegdheden van $helenaam"),
+                '#type'=> 'fieldset',
+                '#edit' => FALSE,
+                '#required' => FALSE,
+                '#collapsible' => TRUE,
+                '#collapsed' => TRUE,
+                //'#weight' => 7,
+                '#tree' => TRUE,
+                );
+            foreach ($vlieger_bevoegdheden as $bevoegdheid) {
+                //show as markup in form or textfield with edit=false
+                $rows[] = array(
+                    ezac_show_date($bevoegdheid->datum_aan),
+                    $namen[$bevoegdheid->instructeur],
+                    $bevoegdheid->bevoegdheid .' - ' 
+                        .$bv_list[$bevoegdheid->bevoegdheid] .' '
+                        .nl2br($bevoegdheid->onderdeel)
+                );
+            }
+            $form['rapport']['VBA'][$vlieger_afkorting]['bevoegdheid']['tabel'] = array(
+                '#theme' => 'table',
+                '#header' => $header,
+                '#rows' => $rows,
+                '#empty' => t('Geen gegevens beschikbaar'),
+                //'#weight' => 7,
+            );
+        }
+    }
+/*** add verslagen & bevoegdheid here ***/    
+    
     return $form;
 }
 
@@ -1524,16 +1635,25 @@ function ezaclvs_currency_callback($form, $form_state) {
 */
 function ezaclvs_tabel_form($form, &$form_state) {
     
-    global $namen;
     global $bevoegdheden;
-    global $bl;
 
-    //read namen from ezac_leden VL records
+    //read namen from ezac_Leden VL records
     $namen = ezac_get_namen();
 
     //read bevoegdheden definitions
     $bevoegdheden = ezaclvs_get_bevoegdheden();
+    
     //build second table indexed on status for table part selection
+    /***
+    * status values
+    *   0 - Diverse
+    *   1 - DBO
+    *   2 - Solo
+    *   3 - Zweefvliegbewijs
+    *   4 - Instructeur
+    *   5 - Examinator
+    *   De hoogst bereikte waarde wordt per lid vastgelegd in ezac_Leden[bevoegdheid]
+    ***/
     foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
         $bev_status[$bevoegdheid_array['status']][$bevoegdheid] = $bevoegdheid_array['naam'];
     }
@@ -1546,19 +1666,20 @@ function ezaclvs_tabel_form($form, &$form_state) {
     $form['titel']['#markup'] = '<p><h2>Tabel invoer bevoegdheden</h2></p>'; 
     $form['titel']['#weight'] = 0;
 
-    /* this doesn't work yet
+    // this doesn't work yet
     // build status reference table for selection
+    //@TODO read list from ezac_lvs_bevoegdheden_status
     $status_table = array(
-        //0 => 'Diversen', //do not show as separate class
-        //1 => 'DBO', //do not show as separate class
-        2 => 'Leerling', //will include values 0,1,2
+        // 0 => 'Diversen', //do not show as separate class
+        1 => 'DBO', //do not show as separate class
+        2 => 'Leerling', //will include values 1,2
         3 => 'Zweefvliegbewijs',
         4 => 'Instructeur',
         5 => 'Examinator',
     );
     
     $form['selectie'] = array(
-    '#title' => 'Selectie',
+    '#title' => 'Selectie bevoegdheden',
     '#type' => 'select',
     '#options' => $status_table,
     '#default_value' => 2, //leerling
@@ -1571,25 +1692,26 @@ function ezaclvs_tabel_form($form, &$form_state) {
         ), 
     );
     //include bevoegdheid records for selected level in array bevoegdheden_sub
-    $bev_sel = isset($form_state['values']['selectie'])
+    $bevoegdheid_selectie = isset($form_state['values']['selectie'])
         ? $form_state['values']['selectie']
         : 2; //default leerling selectie
-    
+    //dpm($bevoegdheid_selectie,'bevoegdheid_selectie'); //debug
     foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
-        if (($bev_sel == 2 && $bevoegdheid_array['status'] <= 2)
-            || ($bev_sel <> 2 && $bevoegdheid_array['status'] = $bev_sel)) {
+        if (($bevoegdheid_selectie == 2 && ($bevoegdheid_array['status'] == 1 || $bevoegdheid_array['status'] == 2))
+            || ($bevoegdheid_selectie <> 2 && $bevoegdheid_array['status'] == $bevoegdheid_selectie)) {
             $bevoegdheden_sub[$bevoegdheid] = $bevoegdheid_array;
         }
     }
-    */
+    //dpm($bevoegdheden_sub,'bevoegdheden_sub'); //debug
+    // einde niet werkende selectie ...
       
     // set instructeur default to value of current user
     $form['instructeur'] = array(
-    '#title' => t('Instructeur'),
-    '#type' => 'select',
-    '#options' => $namen,  //@TODO select only instructeur from namen
-    '#default_value' => $afkorting,
-    '#weight' => 2,
+        '#title' => t('Instructeur'),
+        '#type' => 'select',
+        '#options' => $namen,  //@TODO select only instructeur from namen
+        '#default_value' => $afkorting,
+        '#weight' => 2,
     );
 
     // query lvs verslag, bevoegdheid records
@@ -1600,17 +1722,19 @@ function ezaclvs_tabel_form($form, &$form_state) {
         ->condition('actief', TRUE, '=')
         ->execute()->fetchAll(); //Assoc('afkorting');
     
+    //dpm($bevoegdheden_leden,'bevoegdheden_leden'); //debug
     //build array $bl(afkorting, bevoegdheid) = array(datum, id)
     foreach ($bevoegdheden_leden as $bevoegdheid) {
         $bl[$bevoegdheid->afkorting][$bevoegdheid->bevoegdheid]['datum'] = $bevoegdheid->datum_aan;
         $bl[$bevoegdheid->afkorting][$bevoegdheid->bevoegdheid]['id'] = $bevoegdheid->id;
     }
+    //dpm($bl,'bl'); //debug
     
     //build table form
     
     //prepare header
     $header = array('Naam');
-    foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+    foreach ($bevoegdheden_sub as $bevoegdheid => $bevoegdheid_array) { //_sub added
             array_push($header, $bevoegdheid);
     }
 
@@ -1632,52 +1756,61 @@ function ezaclvs_tabel_form($form, &$form_state) {
                     '#type' => 'markup',
                     '#markup' => $naam,
                     '#size' => 25,
-                    '#sticky' => TRUE, //this doesn't work
+                    //'#sticky' => TRUE, //this doesn't work
                 ),
         );
-        foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
+        //add each bevoegdheid to the row
+        foreach ($bevoegdheden_sub as $bevoegdheid => $bevoegdheid_array) { //_sub added
             //create datum entry field for this $bevoegdheid for this $afkorting (person)
-            $rc_value = (isset($bl[$afkorting][$bevoegdheid])) 
+            $rc_value = (isset($bl[$afkorting][$bevoegdheid])) //row-column value
                        ? $bl[$afkorting][$bevoegdheid]['datum'] 
                        : '';                
-            array_push($row_value, array(
+            array_push($row_value, 
+                array(
                     '#type' => 'textfield',
                     '#maxlength' => 10,
-                    '#size' => 10,
+                    '#size' => 11,
                     '#default_value' => $rc_value,
                 )
             );
         }
+        //add row to table
         array_push($rows, $row_value);
-    }
+    } //foreach namen
+    
     //show table with datum entry field for each bevoegdheid record per naam
-    $form['table'] = array(
-    // Theme this part of the form as a table.
-    '#theme' => 'ezaclvs_form_table',
-    '#header' => $header,
-    '#weight' => 5,
-    '#prefix' => '<div id="tabel-div">',
-    '#suffix' => '</div>',
-    // Rows in the form table.
-    'rows' => $rows,
+    $form['tabel'] = array(
+        // Theme this part of the form as a table.
+        '#theme' => 'ezaclvs_form_table',
+        '#header' => $header,
+        '#weight' => 5,
+        '#prefix' => '<div id="tabel-div">',
+        '#suffix' => '</div>',
+        // Rows in the form table. (no # sign)
+        'rows' => $rows, 
     );
     
     $form['bevoegdheden'] = array(
-    '#type' => 'value',
-    '#value' => $header, //store header info for bevoegdheid reference in submit function
+        '#type' => 'value',
+        '#value' => $header, //store header info for bevoegdheid reference in submit function
     );
     
     // store namen_lijst in form for use in validate function
-    $form['namen'] = array(
-    '#type' => 'value',
-    '#value' => $namen_lijst,
+        $form['namen'] = array(
+        '#type' => 'value',
+        '#value' => $namen_lijst,
     );
     
+    // store bl in form for use in validate function
+        $form['bl'] = array(
+        '#type' => 'value',
+        '#value' => $bl,
+    );
     $form['submit'] = array(
-    '#type' => 'submit',
-    '#description' => t('Aanpassen van de bevoegdheden'),
-    '#value' => t('Invoeren'),
-    '#weight' => 99,
+        '#type' => 'submit',
+        '#description' => t('Aanpassen van de bevoegdheden'),
+        '#value' => t('Invoeren'),
+        '#weight' => 99,
     );
     
     return $form;
@@ -1691,7 +1824,7 @@ function ezaclvs_tabel_form($form, &$form_state) {
 * @returns $form['table']
 **/
 function ezaclvs_tabel_callback($form, $form_state) {
-    return $form['table'];
+    return $form['tabel'];
 }
 
 function ezaclvs_tabel_form_validate($form, &$form_state) {
@@ -1715,11 +1848,12 @@ function ezaclvs_tabel_form_validate($form, &$form_state) {
 function ezaclvs_tabel_form_submit($form, &$form_state) {
     //check all table fields for change against bevoegdhedeid_lid value
     //update or enter records accordingly
-    global $bl; //bevoegdheden leden
     //global $namen; //leden afkorting => helenaam
     $bevoegdheden = $form_state['values']['bevoegdheden']; //from table header
     $namen = $form_state['values']['namen']; // namen[] = array(afkorting, naam)
-    
+    $bl = $form_state['values']['bl']; // bevoegdheden lijst
+    //dpm($bl,'bl @ submit'); //debug
+    //dpm($form_state['values']['rows'],'rows @submit'); //debug
     foreach ($form_state['values']['rows'] as $r => $row) {
         foreach($row as $c => $bev_datum) {
             //index 1 => bevoegdheid[1] 
