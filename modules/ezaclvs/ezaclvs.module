@@ -1666,12 +1666,11 @@ function ezaclvs_tabel_form($form, &$form_state) {
     $form['titel']['#markup'] = '<p><h2>Tabel invoer bevoegdheden</h2></p>'; 
     $form['titel']['#weight'] = 0;
 
-    // this doesn't work yet
     // build status reference table for selection
     //@TODO read list from ezac_lvs_bevoegdheden_status
     $status_table = array(
-        // 0 => 'Diversen', //do not show as separate class
-        1 => 'DBO', //do not show as separate class
+        //0 => 'Diversen', 
+        //1 => 'DBO', 
         2 => 'Leerling', //will include values 1,2
         3 => 'Zweefvliegbewijs',
         4 => 'Instructeur',
@@ -1691,19 +1690,17 @@ function ezaclvs_tabel_form($form, &$form_state) {
         'progress' => array('type' => 'none'),
         ), 
     );
+    
     //include bevoegdheid records for selected level in array bevoegdheden_sub
     $bevoegdheid_selectie = isset($form_state['values']['selectie'])
         ? $form_state['values']['selectie']
         : 2; //default leerling selectie
-    //dpm($bevoegdheid_selectie,'bevoegdheid_selectie'); //debug
     foreach ($bevoegdheden as $bevoegdheid => $bevoegdheid_array) {
         if (($bevoegdheid_selectie == 2 && ($bevoegdheid_array['status'] == 1 || $bevoegdheid_array['status'] == 2))
             || ($bevoegdheid_selectie <> 2 && $bevoegdheid_array['status'] == $bevoegdheid_selectie)) {
             $bevoegdheden_sub[$bevoegdheid] = $bevoegdheid_array;
         }
     }
-    //dpm($bevoegdheden_sub,'bevoegdheden_sub'); //debug
-    // einde niet werkende selectie ...
       
     // set instructeur default to value of current user
     $form['instructeur'] = array(
@@ -1722,14 +1719,13 @@ function ezaclvs_tabel_form($form, &$form_state) {
         ->condition('actief', TRUE, '=')
         ->execute()->fetchAll(); //Assoc('afkorting');
     
-    //dpm($bevoegdheden_leden,'bevoegdheden_leden'); //debug
+    $bl = array(); 
     //build array $bl(afkorting, bevoegdheid) = array(datum, id)
     foreach ($bevoegdheden_leden as $bevoegdheid) {
         $bl[$bevoegdheid->afkorting][$bevoegdheid->bevoegdheid]['datum'] = $bevoegdheid->datum_aan;
         $bl[$bevoegdheid->afkorting][$bevoegdheid->bevoegdheid]['id'] = $bevoegdheid->id;
     }
-    //dpm($bl,'bl'); //debug
-    
+
     //build table form
     
     //prepare header
@@ -1737,6 +1733,8 @@ function ezaclvs_tabel_form($form, &$form_state) {
     foreach ($bevoegdheden_sub as $bevoegdheid => $bevoegdheid_array) { //_sub added
             array_push($header, $bevoegdheid);
     }
+
+    unset($form_state['input']['rows']); //clear previous input
 
     //build rows array of column arrays
     $rows = array(
