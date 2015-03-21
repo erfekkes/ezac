@@ -643,15 +643,10 @@ function ezacservices_check_datum($datum, &$datumStart, &$datumEnd) {
 * Callback function for starts retrieve
 * @param string $resource_id value for start record OR datum value in YYYY[-mm[-dd]] format (van:tot)
 * $param string $naam value for Gezagvoerer or Tweede (optional)
+* $param string $registratie value for Registratie (optional)
 * @return array xml or json formatted list of ezac_Starts records
 */
 function _ezacservices_starts_retrieve($resource_id, $datum, $naam, $registratie) { 
-  // Check permission
-  // TODO this may not be required
-  /*
-  if (!user_access('EZACservices starts retrieve')) {
-    return services_error('Unauthorized', 401);
-  } */
   // Check for mad values
 
     if ($resource_id <> '*') { // select specific record
@@ -663,7 +658,8 @@ function _ezacservices_starts_retrieve($resource_id, $datum, $naam, $registratie
       //return 'zoek op id ' .$id;
       return ezacservices_find_starts_items_by_id($id); // select one start record by id
     }
-  //$resource_id = *
+
+    //$resource_id = *
   if (isset($naam)) { //select start records for gezagvoerder = $naam OR tweede = $naam
     //sanitize $naam
     $naam = trim(urldecode($naam)); //urldecode required or implemented by services?
@@ -672,8 +668,8 @@ function _ezacservices_starts_retrieve($resource_id, $datum, $naam, $registratie
         return services_error($errmsg, 406);
     }
   }
-  if (isset($registratie)) { //select start records for gezagvoerder = $naam OR tweede = $naam
-    //sanitize $naam
+  if (isset($registratie)) { //select start records for registratie = $registratie
+    //sanitize $registratie
     $registratie = trim(urldecode($registratie)); //urldecode required or implemented by services?
     if (strpos($registratie, ';')) { //do not allow semicolon to prevent sql insertion
         $errmsg = 'Registratie value not allowed [' .$registratie .']';
@@ -734,12 +730,12 @@ function ezacservices_find_starts_items_by_date($datumStart, $datumEnd, $naam, $
   $query->orderBy('s.datum', 'ASC');
   $query->orderBy('s.start', 'ASC');
 
-  $items = $query->execute()->fetchAll(); // TODO apply try.. catch with services_error('text', 406)in callback
+  $items = $query->execute()->fetchAll(); 
   return $items;
 }
 
 /**
-* Gets one starts records
+* Gets one starts record
 * @param int $id
 *       Id of record selected
 * @return array

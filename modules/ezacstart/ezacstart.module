@@ -1238,7 +1238,8 @@ function ezacstart_show_form($form, &$form_state) {
         );
     }
     
-    $form['show']['tabel'] = ezacstart_display("Starts op $display_datum", $starts, $det);
+    if (!is_null($starts))
+        $form['show']['tabel'] = ezacstart_display("Starts op $display_datum", $starts, $det);
     
     return $form;
 } //ezacstart_show_form
@@ -1649,6 +1650,8 @@ function ezacstart_get_starts($id = NULL, $datum = NULL, $naam = NULL) {
         if (isset($naam)) $params['naam'] = $naam;
     }
     $result = oAuthRequest($resource, 'GET', $params);
+    //$result = ezaccommon_services_client($resource, 'GET', $params); //test alternative functie
+    //dpm($result,'oAuth result'); //debug
     return drupal_json_decode($result);
 }
 

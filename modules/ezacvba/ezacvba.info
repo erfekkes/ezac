@@ -1,0 +1,8 @@
+; $Id$
+name = EZAC Vorderingen en Bevoegdheden Administratie
+description = Vorderingen en Bevoegdheden Administratie
+version = "7.x-0.1"
+core = 7.x
+dependencies[] = ezaccommon
+dependencies[] = ezacstart
+dependencies[] = date
