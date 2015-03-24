@@ -130,7 +130,7 @@ function ezacvba_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('ezacvba_tabel_form'),
       'access callback' => 'user_access',
-      'access arguments' => array('ezac_vba_input'),
+      'access arguments' => array('ezac_vba_edit'),
       'type' => MENU_LOCAL_TASK,
       'weight' => 6,
     );
@@ -573,6 +573,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
     if (count($vliegers) > 0) {
         $form['vliegers']['select'] = array(
             '#title' => t('Selecteer een vlieger'),
+            '#description' => t('Je kunt verschillende vliegers na elkaar selecteren en invullen<br>Kies Opslaan nadat je de laatste hebt ingevuld'),
             '#type' => 'select',
             '#options' => $vliegers,
             '#ajax' => array(
@@ -646,7 +647,10 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
         //   possible entry of 'bevoegdheid' as of datum 
     
         // invoeren opmerking
-        //@TODO lees uit ['vlieger_storage'] eventueel eerder ingevoerde waarde voor #default_value        
+        // lees uit ['vlieger_storage'] eventueel eerder ingevoerde waarde voor #default_value
+        $opmerking = (isset($form_state['vlieger_storage'][$afkorting]['opmerking']))
+            ? $form_state['vlieger_storage'][$afkorting]['opmerking']
+            : '';
         $form['vliegers']['data'][$afkorting]['opmerking'] = array(
             '#title' => t("Opmerkingen voor $helenaam"),
             '#type' => 'textarea',
@@ -654,6 +658,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
             '#required' => FALSE,  
             '#weight' => 5,
             '#tree' => TRUE,
+            '#default_value' => $opmerking,
         );
         
         //toon huidige bevoegdheden
@@ -703,6 +708,12 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
         }
 
         //formatteer bevoegdheid en onderdeel in een tabel regel
+        $soort = (isset($form_state['vlieger_storage'][$afkorting]['bevoegdheid']['rows'][0]['soort']))
+            ? $form_state['vlieger_storage'][$afkorting]['bevoegdheid']['rows'][0]['soort']
+            : 0; 
+        $onderdeel = (isset($form_state['vlieger_storage'][$afkorting]['bevoegdheid']['rows'][0]['onderdeel']))
+            ? $form_state['vlieger_storage'][$afkorting]['bevoegdheid']['rows'][0]['onderdeel']
+            : '';
         $tabel_rows = array(
             '#tree' => TRUE,
             array(
@@ -710,13 +721,13 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
                     '#description' => 'Toekennen van een nieuwe bevoegdheid',
                     '#type' => 'select',
                     '#options' => $bv_list,
-                    '#default_value' => 0, //<Geen wijziging>
+                    '#default_value' => $soort, //<Geen wijziging>
                 ),
                 'onderdeel' => array(
                     '#description' => 'Bijvoorbeeld overland type',
                     '#type' => 'textfield',
                     '#required' => FALSE,
-                    '#default_value' => '',
+                    '#default_value' => $onderdeel,
                 ),
             ),
         );
@@ -775,7 +786,6 @@ function ezacvba_verslag_form_validate($form, &$form_state) {
     //validate wordt bij elke AJAX call aangeroepen dus ook bij keuze vlieger uit dropdown
     //  om te zorgen dat informatie voor elke ingevoerde vlieger bij SUBMIT beschikbaar is, 
     //  wordt de informatie hier in een aparte array in form_state['values']['vlieger-storage'] gezet
-    //@TODO dit werkt NIET - kennelijk wordt elke keer het form_state nieuw opgebouwd...
     foreach ($form_state['values']['vliegers']['data'] as $afkorting => $verslag) {
         if (($verslag['opmerking'] <> '') || 
             ($verslag['bevoegdheid']['rows'][0]['soort'] != '0')){
