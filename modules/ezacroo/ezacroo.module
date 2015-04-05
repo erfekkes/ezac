@@ -83,13 +83,13 @@ function ezacroo_menu() {
     'page arguments' => array('today'),
     'type' => MENU_NORMAL_ITEM,
     'access callback' => 'user_access',
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
   );
   $items['rooster/nr1'] = array(
     'title' => 'vanaf vandaag',
     'page callback' => 'ezacroo_page',
     'page arguments' => array('today'),
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
     'access callback' => 'user_access',
     'type' => MENU_DEFAULT_LOCAL_TASK,
     'weight' => 0,
@@ -98,7 +98,7 @@ function ezacroo_menu() {
     'title' => 'alle dagen',
     'page callback' => 'ezacroo_page',
     'page arguments' => array('all'),
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
     'access callback' => 'user_access',
     'type' => MENU_LOCAL_TASK,
     'weight' => 1,
@@ -108,7 +108,7 @@ function ezacroo_menu() {
     'page callback' => 'ezacroo_page',
     'page arguments' => array('instructor'),
     'access callback' => 'user_access',
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
     'type' => MENU_LOCAL_TASK,
     'weight' => 2,
   );
@@ -117,7 +117,7 @@ function ezacroo_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('ezacroo_create_form', 2), //pass parameter 1 (datum)
     'access callback' => 'user_access',
-    'access arguments' => array('rooster_edit'),
+    'access arguments' => array('ezac_rooster_edit'),
     'type' => MENU_LOCAL_TASK,
     'weight' => 3,
   );
@@ -127,7 +127,7 @@ function ezacroo_menu() {
     'page arguments' => '',
     'type' => MENU_CALLBACK,
     'access callback' => 'user_access',
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
   );
   $items['rooster/change'] = array(
     'title' => 'Geruilde dienst',
@@ -135,7 +135,7 @@ function ezacroo_menu() {
     'page arguments' => '',
     'type' => MENU_CALLBACK,
     'access callback' => 'user_access',
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
   );
   $items['rooster/confirm'] = array(
     'title' => 'Bevestig de te ruilen dienst',
@@ -143,7 +143,7 @@ function ezacroo_menu() {
     'page arguments' => '',
     'type' => MENU_CALLBACK,
     'access callback' => 'user_access',
-    'access arguments' => array('rooster'),
+    'access arguments' => array('ezac_rooster'),
   );
   
   //	}
@@ -444,7 +444,7 @@ function ezacroo_page($select = '') {
   } // while
 
   // Produce last line
-    if isset($ActDatum) 
+    if (isset($ActDatum)) 
         $row[] = array(
             user_access('ezac_rooster_edit')
             ? "<a href='$base_url/rooster/create/$ActDatum_link'>$ActDatum</a>"

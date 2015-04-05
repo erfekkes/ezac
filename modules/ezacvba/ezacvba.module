@@ -130,7 +130,7 @@ function ezacvba_menu() {
       'page callback' => 'drupal_get_form',
       'page arguments' => array('ezacvba_tabel_form'),
       'access callback' => 'user_access',
-      'access arguments' => array('ezac_vba_edit'),
+      'access arguments' => array('ezac_vba_input'),
       'type' => MENU_LOCAL_TASK,
       'weight' => 6,
     );
@@ -221,8 +221,6 @@ function ezacvba_get_bevoegdheden() {
 **/
 function ezacvba_status_form($form, &$form_state) {
     global $base_url;
-    //$namen = ezac_get_namen();
-    //$bevoegdheden = ezacvba_get_bevoegdheden();
     $datum_start = date('Y') ."-01-01";
     $datum_eind = date('Y') ."-12-31";
 
@@ -361,8 +359,6 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
         '#type' => 'value',
         '#value' => $namen,
     );
-    //$namen[''] = '<leeg>';
-    //$namen['Onbekend'] = '<Onbekend>';
     
     //opslag voor ingevoerde opmerkingen en bevoegdheden per vlieger
     //dit is een array van $vlieger['data'] gegevens (opmerking en bevoegdheid)
@@ -394,7 +390,6 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
         $start_dates[$start->datum] = ezac_show_date($start->datum); //list of dates for selection
     }
     $datum = (isset($start_dates))
-        //? key($start_dates) // most recent date value
         ? $starts[0]->datum // most recent date value
         : date('Y-m-d');
     
@@ -677,7 +672,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
         );
         $rows = array();
         
-        //@TODO lees uit ['vlieger_storage'] eventueel eerder ingevoerde waarde voor #default_value
+        // lees uit ['vlieger_storage'] eventueel eerder ingevoerde waarde voor #default_value
         if (!empty($vlieger_bevoegdheden)) { //create fieldset
             $form['vliegers']['data'][$afkorting]['bevoegdheden'] = array(
                 '#title' => t("Bevoegdheden van $helenaam"),
@@ -786,11 +781,13 @@ function ezacvba_verslag_form_validate($form, &$form_state) {
     //validate wordt bij elke AJAX call aangeroepen dus ook bij keuze vlieger uit dropdown
     //  om te zorgen dat informatie voor elke ingevoerde vlieger bij SUBMIT beschikbaar is, 
     //  wordt de informatie hier in een aparte array in form_state['values']['vlieger-storage'] gezet
-    foreach ($form_state['values']['vliegers']['data'] as $afkorting => $verslag) {
-        if (($verslag['opmerking'] <> '') || 
-            ($verslag['bevoegdheid']['rows'][0]['soort'] != '0')){
-            //opmerking of bevoegdheid is ingevoerd
-            $form_state['vlieger_storage'][$afkorting] = $verslag;
+    if (isset($form_state['values']['vliegers'])) {
+        foreach ($form_state['values']['vliegers']['data'] as $afkorting => $verslag) {
+            if (($verslag['opmerking'] <> '') || 
+                ($verslag['bevoegdheid']['rows'][0]['soort'] != '0')){
+                //opmerking of bevoegdheid is ingevoerd
+                $form_state['vlieger_storage'][$afkorting] = $verslag;
+            }
         }
     }
 }
@@ -859,7 +856,16 @@ function ezacvba_verslag_form_submit($form, &$form_state) {
 
     //mail verslag naar instructeurs
     //@TODO haal lijst van e-mail adressen uit ezac_Leden
-    $to = 'webmaster@ezac.nl'; //instructie@ezac.nl
+    $instructeurs = db_select('ezac_Leden', 'l')
+        ->condition('l.instructie', TRUE)
+        ->condition('l.actief', TRUE)
+        ->fields('l',array('e_mail'))
+        ->execute()->fetchCol();
+    $to = '';
+    foreach ($instructeurs as $email) {
+        $to .= $email .'; ';
+    }
+    //$to = 'webmaster@ezac.nl'; //instructie@ezac.nl
     $mail_datum = ezac_show_date($form_state['values']['datum_select']['datum']);
     $mail_instructeur = $namen[$instructeur];
     $subject = "EZAC verslag $mail_datum van $mail_instructeur";
