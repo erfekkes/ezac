@@ -171,8 +171,8 @@ function ezacstart_entity_info() {
 
       // Then we add some properties that influence how our entities are treated
       'entity keys' => array( // These keys are the name of properties of entity objects.
-        'id' => ‘ezacstart_entity_id',
-        'label' => ‘EZAC start record’,
+        'id' => 'ezacstart_entity_id',
+        'label' => 'EZAC start record',
       ),
       'fieldable' => FALSE, // We DO NOT want to be able to attach fields to our entity.
       'admin ui' => array(
@@ -184,7 +184,7 @@ function ezacstart_entity_info() {
         'ezacstart_entity_type' => array( // For the sake of simplicity, we only define one bundle.
           'label' => t('EZAC start entity type'),
           'admin' => array(
-            'path' => 'admin/config/ezacstart, // Field configuration pages for our entity will live at this address.
+            'path' => 'admin/config/ezacstart', // Field configuration pages for our entity will live at this address.
           ),
         ),
       ),
@@ -619,7 +619,6 @@ function ezacstart_form_submit($form, &$form_state) {
   $data .= '&start=' .urlencode($start) .'&landing=' .urlencode($landing) .'&duur=' .urlencode($duur);
   $data .= '&instructie=' .urlencode($instructie);
   $data .= '&opmerking=' .urlencode($opmerking);
-  
   */
   $params = array(
     'datum' => $datum,
@@ -697,22 +696,26 @@ function ezacstart_form_submit($form, &$form_state) {
   }
   
   // send REST resource request
-  //$result = drupal_http_request($resource, $options);
+    //transpose $params array to $options['data'] string using http_build_query($data)
+    //$options['data'] = http_build_query($params);
+    $resource .= '?' .http_build_query($params, '', '&'); //prevent &amp; formatting error
+    $result = drupal_http_request($resource, $options); // TIJDELIJK WEER ZONDER OAUTH
+    //dpm($result,'result'); //debug
     //drupal_set_message("resource [$resource]"); //debug
-  $result = oAuthRequest($resource, $options['method'], $params);
+  //$result = oAuthRequest($resource, $options['method'], $params);
  
-  /* // not applicable with curl
+  // not applicable with curl
   if ($result->status_message <>  'OK') { //error
     drupal_set_message('error ' .$result->code .' - ' .$result->error, 'error');
     return; 
   }
-  */
+  
   if ($result == null) { //geen Id waarde ontvangen
       drupal_set_message('Fout bij aanmaken of wijzigen start','error');
       return; //error
   }
   // return result
-  $message = ($new) ? "Start is aangemaakt [$result]" : "Start is bijgewerkt [$result]" ;
+  $message = ($new) ? "Start is aangemaakt [$result->status_message]" : "Start is bijgewerkt" ;
   if ($op == 'Verwijderen') $message = "Start $id op datum $datum is verwijderd";
   drupal_set_message($message);
   
