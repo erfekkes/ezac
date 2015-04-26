@@ -972,6 +972,7 @@ function ezacvba_verslagen_form($form, &$form_state) {
     $dagverslagen = db_select('ezac_vba_dagverslagen', 'd')
         ->fields('d', array('id', 'datum', 'weer', 'verslag', 'instructeur'))
         ->condition('d.datum', $datum, $condition)
+        ->orderBy('d.datum','DESC')
         ->execute()->fetchall();
     
     $header = array(
@@ -1025,7 +1026,7 @@ function ezacvba_verslagen_form($form, &$form_state) {
     //display verslagen
     $p_overzicht = '';
     if (isset($overzicht)) {
-        ksort($overzicht); //sort overzicht on datum key
+        krsort($overzicht); //sort overzicht on datum key (descending)
         foreach ($overzicht as $datum => $ovz) {
             if (isset($ovz['dagverslag'])) {
                 foreach ($ovz['dagverslag'] as $id => $verslag) {
