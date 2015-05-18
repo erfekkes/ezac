@@ -118,7 +118,7 @@ function ezacstart_menu() {
       'title' => 'Inzien per dag',
       'description'=> 'Startlijst per dag',
       'page callback' => 'ezacstart_browse',
-      'page arguments' => array(2, 3, DETAILS), //datum en naam met details
+      'page arguments' => array(2, 3, 4, DETAILS), //datum en naam met details
       'access callback' => 'user_access',
       'access arguments' => array('ezac_start_view'),
       'type' => MENU_CALLBACK,
@@ -127,7 +127,7 @@ function ezacstart_menu() {
       'title' => 'Totalen inzien per dag',
       'description'=> 'Startlijst totalen per dag',
       'page callback' => 'ezacstart_browse',
-      'page arguments' => array(2, 3, TOTALS), //datum en naam met details
+      'page arguments' => array(2, 3, 4, TOTALS), //datum en naam met details
       'access callback' => 'user_access',
       'access arguments' => array('ezac_start_view'),
       'type' => MENU_CALLBACK,
@@ -162,6 +162,8 @@ function ezacstart_theme_not() { //ff uitgezet
 /**
 * Implements hook_entity_info().
 */
+
+/** NOT ACTIVE YET ***
 function ezacstart_entity_info() {
   $return = array(
     'ezacstart_entity_type' => array(
@@ -731,9 +733,10 @@ function ezacstart_form_submit($form, &$form_state) {
  * Browse starts record
  * @param string $datum
  * @param string $afkorting
+ * @param string $registratie
  * @param boolean $details
  */
-function ezacstart_browse($datum, $afkorting = NULL, $details) {
+function ezacstart_browse($datum, $afkorting = NULL, $registratie = NULL, $details) {
   if ($afkorting == '') {
     $afkorting = null;
     $title = 'Starts van ' .ezac_show_date($datum);
@@ -741,7 +744,10 @@ function ezacstart_browse($datum, $afkorting = NULL, $details) {
   else {
     $title = 'Starts ' .ezac_get_naam($afkorting) .' van ' .ezac_show_date($datum);
   }
-  $starts = ezacstart_get_starts(null, $datum, $afkorting);
+    if (isset($registratie)) {
+        $title .= " voor $registratie";
+    }
+  $starts = ezacstart_get_starts(null, $datum, $afkorting, $registratie);
   if ($starts == null) {
       $starts = array();
   }
@@ -1709,10 +1715,11 @@ function _ezacstart_download($datum) {
  * @param int $id (optional) id of specific start record
  * @param string $datum date range YYYY[-MM[-DD]]
  * @param string $naam (optional) value for Gezagvoerder of Tweede
+ * @param string $registratie (optional)
  * @returns struct array of start records
  * uses EZAC web service api/starts
  **/
-function ezacstart_get_starts($id = NULL, $datum = NULL, $naam = NULL) {
+function ezacstart_get_starts($id = NULL, $datum = NULL, $naam = NULL, $registratie = NULL) {
 
     // build REST resource request
     // oAuthRequest is defined in ezacapi.inc 
@@ -1726,6 +1733,7 @@ function ezacstart_get_starts($id = NULL, $datum = NULL, $naam = NULL) {
         $params = array();
         $params['datum'] = $datum;
         if (isset($naam)) $params['naam'] = $naam;
+        if (isset($registratie)) $params['registratie'] = $registratie;
     }
     $result = oAuthRequest($resource, 'GET', $params);
     //$result = ezaccommon_services_client($resource, 'GET', $params); //test alternative functie
@@ -1737,10 +1745,11 @@ function ezacstart_get_starts($id = NULL, $datum = NULL, $naam = NULL) {
  * Consume web service for starts by index
  * @param string $datum date range YYYY[-MM[-DD]]
  * @param string $naam (optional) value for Gezagvoerder of Tweede
+ * @param string $registratie (optional)
  * @returns array of start records
  * uses EZAC web service api/starts
  **/
-function ezacstart_get_starts_index($datum, $naam = NULL) {
+function ezacstart_get_starts_index($datum, $naam = NULL, $registratie = NULL) {
 // build REST resource request
 // oAuthRequest is defined in ezacapi.inc 
     if (!isset($datum)) return;
@@ -1749,6 +1758,8 @@ function ezacstart_get_starts_index($datum, $naam = NULL) {
   $params = array();
   $params['datum'] = $datum;
   if (isset($naam)) $params['naam'] = $naam;
+  if (isset($registratie)) $params['registratie'] = $registratie;
+
   $result = oAuthRequest($resource, 'GET', $params);
   return drupal_json_decode($result);
 }
