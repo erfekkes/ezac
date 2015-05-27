@@ -1283,7 +1283,7 @@ function ezacstart_show_form($form, &$form_state) {
             break;
     }
         
-    $starts = ezacstart_get_starts(null, $datum, $afkorting);
+    $starts = ezacstart_get_starts(null, $datum, $afkorting, null);
     $display_datum = ezac_show_date($datum);
 
     $form['show'] = array(
@@ -1733,7 +1733,7 @@ function ezacstart_get_starts($id = NULL, $datum = NULL, $naam = NULL, $registra
         $params = array();
         $params['datum'] = $datum;
         if (isset($naam)) $params['naam'] = $naam;
-        if (isset($registratie)) $params['registratie'] = $registratie;
+        if (isset($registratie) && $registratie != null) $params['registratie'] = $registratie;
     }
     $result = oAuthRequest($resource, 'GET', $params);
     //$result = ezaccommon_services_client($resource, 'GET', $params); //test alternative functie
