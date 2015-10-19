@@ -248,7 +248,7 @@ function ezacvba_status_form($form, &$form_state) {
         'callback' => 'ezacvba_status_callback', 
         'wrapper' => 'status-div',
         'effect' => 'fade',
-        'progress' => array('type' => 'none'),
+        'progress' => array('type' => 'throbber'),
         ),
     );
     
@@ -415,7 +415,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
             'callback' => 'ezacvba_verslag_datum_callback', 
             'wrapper' => 'datum-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
             ), 
     );
 
@@ -433,7 +433,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
             'callback' => 'ezacvba_verslag_callback', 
             'wrapper' => 'vliegers-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
             ), 
         );
     }
@@ -449,7 +449,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
             'callback' => 'ezacvba_verslag_callback', 
             'wrapper' => 'vliegers-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
             ), 
         );
     }
@@ -470,7 +470,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
             'callback' => 'ezacvba_verslag_callback', 
             'wrapper' => 'vliegers-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
             ), 
     );
 
@@ -488,7 +488,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
             'callback' => 'ezacvba_verslag_callback', 
             'wrapper' => 'vliegers-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
             ), 
         );
 
@@ -575,7 +575,7 @@ function ezacvba_verslag_form($form = NULL, &$form_state) {
                 'callback' => 'ezacvba_verslag_callback', 
                 'wrapper' => 'vliegers-div',
                 'effect' => 'fade',
-                'progress' => array('type' => 'none'),
+                'progress' => array('type' => 'throbber'),
                 ), 
         );
     
@@ -940,7 +940,7 @@ function ezacvba_verslagen_form($form, &$form_state) {
         'callback' => 'ezacvba_verslagen_callback', 
         'wrapper' => 'verslagen-div',
         'effect' => 'fade',
-        'progress' => array('type' => 'none'),
+        'progress' => array('type' => 'throbber'),
         ), 
     );   
 
@@ -1141,7 +1141,7 @@ function ezacvba_persoon_form($form, &$form_state, $overzicht = FALSE) {
             'callback' => 'ezacvba_verslag_callback', 
             'wrapper' => 'vliegers-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
             ),
         );
 
@@ -1190,7 +1190,7 @@ function ezacvba_persoon_form($form, &$form_state, $overzicht = FALSE) {
         'callback' => 'ezacvba_verslag_callback', 
         'wrapper' => 'vliegers-div',
         'effect' => 'fade',
-        'progress' => array('type' => 'none'),
+        'progress' => array('type' => 'throbber'),
         ), 
     );
 
@@ -1355,7 +1355,7 @@ function ezacvba_persoon_form($form, &$form_state, $overzicht = FALSE) {
                 'callback' => 'ezacvba_bevoegdheid_callback', 
                 'wrapper' => 'bevoegdheid-div',
                 'effect' => 'fade',
-                'progress' => array('type' => 'none'),
+                'progress' => array('type' => 'throbber'),
                 ), 
             );
 
@@ -1523,7 +1523,7 @@ function ezacvba_currency_form($form, &$form_state) {
             'callback' => 'ezacvba_currency_callback', 
             'wrapper' => 'rapport-div',
             'effect' => 'fade',
-            'progress' => array('type' => 'none'),
+            'progress' => array('type' => 'throbber'),
         ),
     );
 
@@ -1544,7 +1544,7 @@ function ezacvba_currency_form($form, &$form_state) {
         'callback' => 'ezacvba_currency_callback', 
         'wrapper' => 'rapport-div',
         'effect' => 'fade',
-        'progress' => array('type' => 'none'),
+        'progress' => array('type' => 'throbber'),
         ), 
     );   
 
@@ -1780,7 +1780,7 @@ function ezacvba_tabel_form($form, &$form_state) {
         'callback' => 'ezacvba_tabel_callback', 
         'wrapper' => 'tabel-div',
         'effect' => 'fade',
-        'progress' => array('type' => 'none'),
+        'progress' => array('type' => 'throbber'),
         ), 
     );
     

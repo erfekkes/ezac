@@ -1352,13 +1352,20 @@ function ezacstart_show_callback($form, $form_state) {
 *       lower boundary
 * @param string $datumEnd timestamp
 *       higher boundary
+* @param string $naam optional 
+* @param string $registratie optional
 * @return array
 *       index list of ezac_Starts records within Datum boundaries
+*           [aantal] - number of starts
+*           [duur] - total duration in minutes
+*           [eigen_aantal] - number of starts for club work assignment
+*           [eigen_duur] - duration in minutes for club work assignment
 */
-function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
+function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam, $registratie) {
   // Compose query
   $query = db_select('ezac_Starts', 's');
-  $query->fields('s', array('id', 'datum', 'duur')); 
+  $query->fields('s', array('id', 'datum', 'registratie', 'start', 'landing', 'duur', 'gezagvoerder', 
+                            'tweede', 'soort', 'startmethode', 'instructie', 'opmerking')); 
   $query->condition('s.datum', array($datumStart, $datumEnd), 'BETWEEN');
   if (isset($naam)) {
     $query->condition(db_or()->condition('s.gezagvoerder', $naam, '=')
@@ -1378,15 +1385,33 @@ function ezacstart_index_starts_by_date($datumStart, $datumEnd, $naam) {
     $duur_hhmm = explode(':', $duur);
     $duur_minuten = $duur_hhmm[0] * 60 + $duur_hhmm[1];
     
+    /* Check of de vlucht voor eigen rekening is of club / prive */
+    if (isset($naam)) { // only when selected list is for a specific person
+        if (in_array($item->startmethode, array('S', 'M')) // sleep (tow) or motor (self launch)
+          or (($item->tweede == $naam) and ($item->instructie == FALSE))// not PIC
+          or (($item->gezagvoerder == $naam) and ($item->instructie == TRUE))// instructor
+          or (in_array($item->soort, array('CLUB', 'DONA', 'PASS'))) //CLUB, DONATEUR or PASSENGER flight
+            ) 
+        {
+              $eigen_minuten = 0;
+        }
+        else $eigen_minuten = $duur_minuten;
+    }
+
     if (!isset($index[$datum])) {
         $index[$datum]['aantal'] = 1;
-	$index[$datum]['duur'] = $duur_minuten;
+        $index[$datum]['duur'] = $duur_minuten;
+        if ($eigen_minuten > 0) $index[$datum]['eigen_aantal'] = 1;
+        else $index[$datum]['eigen_aantal'] = 0;
+        $index[$datum]['eigen_duur'] = $eigen_minuten;
     }
     else {
         $index[$datum]['aantal']++; // increment value for each record
-	$index[$datum]['duur'] += $duur_minuten;
+        $index[$datum]['duur'] += $duur_minuten;
+        if ($eigen_minuten > 0) $index[$datum]['eigen_aantal']++;
+        $index[$datum]['eigen_duur'] += $eigen_minuten;
     }
-  }
+  } //foreach
   if (isset($index)) return $index;
   else return;
 }
@@ -1531,26 +1556,32 @@ function ezacstart_report_table($datum, $list) {
     //create csv array for download
     //create table header
     //@TODO $download global does not function currently
-    $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur\r\n"';
+    $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur";"eigen_starts";"eigen_duur\r\n"';
   
     foreach ($namen as $afkorting => $naam) {
         if (is_array($datum)) { //date range passed in $datum array
             $dagen = ezacstart_index_starts_by_date($datum[0], $datum[1], $afkorting);
         }
         else {
-            $dagen = ezacstart_index_starts_by_date("$datum-01-01", "$datum-12-31", $afkorting);
+            $dagen = ezacstart_index_starts_by_date("$datum-01-01", "$datum-12-31", $afkorting, NULL);
         }
         if (isset($dagen)) {
           $totaal = 0;
           $aantal_dagen = 0;
+          $eigen_aantal = 0;
+          $eigen_duur = 0;
           $duur = 0; // vluchtduur in minuten
           foreach ($dagen as $dag => $aantal) { //aantal is array van [aantal] en [duur]
             $totaal += $aantal['aantal'];
             $duur += $aantal['duur'];
+            $eigen_aantal += $aantal['eigen_aantal'];
+            $eigen_duur += $aantal['eigen_duur'];
             $aantal_dagen += 1;
           }
           $hours = intval($duur / 60);
           $minutes = $duur - ($hours * 60);
+          $hours2 = intval($eigen_duur / 60);
+          $minutes2 = $eigen_duur - ($hours2 * 60);
 
           $dat = (is_array($datum))
               ? "$datum[0]:$datum[1]"
@@ -1561,9 +1592,9 @@ function ezacstart_report_table($datum, $list) {
             $dag,
             $totaal,
             sprintf('%02u:%02u', $hours, $minutes),
+            $eigen_aantal,
+            sprintf('%02u:%02u', $hours2, $minutes2),
           );
-          //add csv formatted line to download array - @TODO does not work now
-          $download .= sprintf('"%s";%u;"%s";%u;%02u:%02u\r\n',$naam,$aantal_dagen,$dag,$totaal,$hours,$minutes);
         }
     }
 
@@ -1589,6 +1620,8 @@ function ezacstart_report_table($datum, $list) {
         array('data' => t('laatste dag')),
         array('data' => t('totaal<br>aantal starts')),
         array('data' => t('totaal<br>duur')),
+        array('data' => t('werkuren<br>aantal starts')),
+        array('data' => t('werkuren<br>duur')),
     );
 
 
@@ -1670,7 +1703,7 @@ function _ezacstart_download($datum) {
     
     //create table header
     $CRLF = "\r\n";  
-    $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur"' .$CRLF;
+    $download = '"naam";"aantal_dagen";"laatste_dag";"aantal_starts";"totale_duur";"werk_starts";"werk_duur"' .$CRLF;
 
     //loop for all VL
     $leden = db_select('ezac_Leden', 'l')
@@ -1684,21 +1717,28 @@ function _ezacstart_download($datum) {
 
     foreach ($leden as $lid) {
     $naam = sprintf("%s %s %s", $lid->voornaam, $lid->voorvoeg, $lid->achternaam);
-    $dagen = ezacstart_index_starts_by_date($datumStart, $datumEind, $lid->afkorting);
+    $dagen = ezacstart_index_starts_by_date($datumStart, $datumEind, $lid->afkorting, NULL);
     if (isset($dagen)) {
       $totaal = 0;
       $aantal_dagen = 0;
       $duur = 0; // vluchtduur in minuten
+      $eigen_aantal = 0; // vluchten op eigen rekening (tellen mee voor werkuren)
+      $eigen_duur = 0;  // vluchtduur op eigen rekening (telt mee voor werkuren)
       foreach ($dagen as $dag => $aantal) { //aantal is array van [aantal] en [duur]
         $totaal += $aantal['aantal'];
         $duur += $aantal['duur'];
+        $eigen_aantal += $aantal['eigen_aantal'];
+        $eigen_duur += $aantal['eigen_duur'];
         $aantal_dagen += 1;
       }
       $hours = intval($duur / 60);
       $minutes = $duur - ($hours * 60);
+      $hours2 = intval($eigen_duur / 60);
+      $minutes2 = $eigen_duur - ($hours2 * 60);
       //add csv formatted line to download array
-      $download .= sprintf('"%s";%u;"%s";%u;"%02u:%02u"',$naam,$aantal_dagen,$dag,$totaal,$hours,$minutes) .$CRLF;
-    }
+      $download .= sprintf('"%s";%u;"%s";%u;"%02u:%02u";%u;"%02u:%02u"',
+                           $naam,$aantal_dagen,$dag,$totaal,$hours,$minutes,$eigen_aantal,$hours2,$minutes2) .$CRLF;
+      }
     }
 
     if (isset($download)) {
