@@ -55,7 +55,7 @@ function ezacpass_services_resources() {
           'help' => 'Retrieves passagiers reserveringen',
           'callback' => '_ezacpass_retrieve',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'),
+          'access arguments' => array('ezac_pass_view'),
           'access arguments append' => FALSE,
           'args' => array(
             array(

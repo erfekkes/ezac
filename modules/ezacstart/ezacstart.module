@@ -641,6 +641,8 @@ function ezacstart_form_submit($form, &$form_state) {
   //'Content-Type' => 'application/json',
     'charset'=> 'UTF-8',
     'Connection'=> 'Keep-Alive',
+    'Cookie' => session_name() .'=' .session_id(), //cookie for logged-in user 
+    'X-CSRF-Token' => drupal_get_token('services'), // formal method is to GET /services/session/token value
     );
 
   if ($new) {

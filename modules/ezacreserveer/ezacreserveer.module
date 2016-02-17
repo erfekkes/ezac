@@ -59,7 +59,7 @@ function ezacreserveer_services_resources() {
           'help' => 'Inzage lessen reserveringen',
           'callback' => '_ezacreserveer_retrieve',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), 
+          'access arguments' => array('ezac_res_view'), 
           'access arguments append' => FALSE,
           'args' => array(
             array(

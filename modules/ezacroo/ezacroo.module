@@ -45,7 +45,7 @@ function ezacroo_services_resources() {
           'help' => 'Retrieves rooster records',
           'callback' => '_ezacroo_rooster_retrieve',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //leden view
+          'access arguments' => array('ezac_rooster'), //rooster view
           'access arguments append' => FALSE,
           'args' => array(
             array(

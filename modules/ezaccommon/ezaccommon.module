@@ -126,6 +126,11 @@ function oAuthRequest($req_url, $req_method, $params) {
   $key    = EZAC_ENDPOINT_KEY; // from ezacapi.inc
   $secret = EZAC_ENDPOINT_SECRET;
   $consumer = new OAuthConsumer($key, $secret, NULL); 
+
+    //login for services user - DO THIS ONLY WHEN CURRENT COOKIE IS NOT AVAILABLE
+    //$user = EZAC_ENDPOINT_USER;
+    //$password = EZAC_ENDPOINT_PASSWORD;
+     
   // Setup OAuth request
   //$api_endpoint = 'https://www.mydrupalsite.com/my_endpoint/resource_name';
   $api_endpoint = $req_url;
@@ -148,6 +153,7 @@ function oAuthRequest($req_url, $req_method, $params) {
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_HTTPHEADER => array(
 			  'Content-Type: application/json',
+              'Cookie: ' .session_name() .'=' . session_id(), //drupal session login cookie for current user
 			  $request->to_header()),
   );
     //dpm($options,'curl options'); //debug

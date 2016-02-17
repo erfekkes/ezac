@@ -8,6 +8,9 @@
 * ezac.nl/api/leden  - get
 * ezac.nl/api/kisten - get
 * ezac.nl/api/starts - get, post, put, delete
+*
+* 160130 - implemented permissions in EZACservices resources
+*
 ***/
 
 /**
@@ -57,7 +60,7 @@ function ezacservices_services_resources() {
           'help' => 'Retrieves leden records',
           'callback' => '_ezacservices_leden_retrieve',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //leden view
+          'access arguments' => array('EZACservices leden retrieve'), //leden view
           'access arguments append' => FALSE,
           'args' => array(
             array(
@@ -94,7 +97,7 @@ function ezacservices_services_resources() {
           'help' => 'Retrieves kisten records',
           'callback' => '_ezacservices_kisten_retrieve',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //kisten view
+          'access arguments' => array('EZACservices kisten retrieve'), //kisten view
           'access arguments append' => FALSE,
           'args' => array(
             array(
@@ -123,7 +126,7 @@ function ezacservices_services_resources() {
           'help' => 'Creates starts records',
           'callback' => '_ezacservices_starts_create',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //starts create
+          'access arguments' => array('EZACservices starts create'), //starts create
           'access arguments append' => FALSE,
           'args' => array(
             array(
@@ -209,7 +212,7 @@ function ezacservices_services_resources() {
           'help' => 'Updates starts records',
           'callback' => '_ezacservices_starts_update',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //starts create
+          'access arguments' => array('EZACservices starts update'), //starts create
           'access arguments append' => FALSE,
           'args' => array(
             array(
@@ -302,7 +305,7 @@ function ezacservices_services_resources() {
           'help' => 'Retrieves starts records',
           'callback' => '_ezacservices_starts_retrieve',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //starts view
+          'access arguments' => array('EZACservices starts retrieve'), //starts view
           'access arguments append' => FALSE,
           'args' => array(
             array(
@@ -339,7 +342,7 @@ function ezacservices_services_resources() {
           'help' => 'Deletes starts records',
           'callback' => '_ezacservices_starts_delete',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //starts view
+          'access arguments' => array('EZACservices starts delete'), //starts view
           'access arguments append' => FALSE,
           'args' => array(
             array(
@@ -363,7 +366,7 @@ function ezacservices_services_resources() {
           'help' => 'Indexes starts records',
           'callback' => '_ezacservices_starts_index',
           'access callback' => 'user_access',
-          'access arguments' => array('access content'), //starts view
+          'access arguments' => array('EZACservices starts index'), //starts view
           'access arguments append' => FALSE,
           'args' => array(
             array(
