@@ -872,6 +872,9 @@ function _ezacpass_reserveer() {
   $form[0]['#markup'] .= "<p>Elke reservering geldt voor <strong>EEN (1)</strong> persoon";
   $form[0]['#markup'] .= "<br>Indien meerdere personen willen meevliegen, dient voor iedere persoon";
   $form[0]['#markup'] .= "<strong> apart</strong> een reservering te worden gemaakt</p>";
+  $form[0]['#markup'] .= "<p>Er geldt een maximum gewicht voor passagiers van <strong>100 kg</strong></p>"; 
+  $form[0]['#markup'] .= "<p>Vrouwen worden geadviseerd om geen lange jurk of korte rok te dragen i.v.m. de ";
+  $form[0]['#markup'] .= "veiligheidsgordels en parachute</p>"; 
   $form[0]['#weight'] = 0;
   $form[0]['#prefix'] = '<div class="ezacpass-intro-div">';
   $form[0]['#suffix'] = '</div>';
