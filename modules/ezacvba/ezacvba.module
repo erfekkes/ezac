@@ -865,7 +865,7 @@ function ezacvba_verslag_form_submit($form, &$form_state) {
     foreach ($instructeurs as $email) {
         $to .= $email .'; ';
     }
-    //$to = 'webmaster@ezac.nl'; //instructie@ezac.nl
+    $to .= '; webmaster@ezac.nl'; //instructie@ezac.nl
     $mail_datum = ezac_show_date($form_state['values']['datum_select']['datum']);
     $mail_instructeur = $namen[$instructeur];
     $subject = "EZAC verslag $mail_datum van $mail_instructeur";
