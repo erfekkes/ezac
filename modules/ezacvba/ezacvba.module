@@ -5,7 +5,7 @@
 * EZAC vorderingen en bevoegdheden administratie v7.x-1.0
 * 
 * Functie: administreren van vliegstandaard
-* 
+*  versie 17-2-2017 met services voor dagverslagen
 */
 
 /**
@@ -43,6 +43,125 @@ function ezacvba_permission() {
       'description' => t('Wijzigen in EZAC Vorderingen en Bevoegdheden Administratie.'),
     ),
   );
+}
+
+/**
+* Implements hook_services_resources().
+*/
+function ezacvba_services_resources() {
+  $api = array(
+   'dagverslagen' => array(
+      'operations' => array(
+        'create' => array( // POST
+          'help' => 'Creates dagverslagen records',
+          'callback' => '_ezacvba_degverslagen_create',
+          'access callback' => 'user_access',
+          'access arguments' => array('ezac_vba_input'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'datum',
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => FALSE,
+            ),
+            array(
+                'name' => 'instructeur',
+                'type' => 'string',
+                'description' => 'Afkorting instructeur',
+                'source' => array('param' => 'instructeur'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'weer',
+                'type' => 'string',
+                'description' => 'Weer',
+                'source' => array('param' => 'weer'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'verslag',
+                'type' => 'string',
+                'description' => 'Verslag',
+                'source' => array('param' => 'verslag'),
+                'optional' => FALSE,
+            ),
+          ),
+        ),
+        'retrieve' => array( // GET
+          'help' => 'Inzage dagverslagen',
+          'callback' => '_ezacvba_dagverslagen_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('ezac_vba_view'), 
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'resource_id',
+              'type' => 'string',
+              'description' => 'resource id',
+              'source' => array('path' => '0'), //<id>|<afkorting> of record requested or <*>
+              'optional' => FALSE,
+              'default value' => '0',
+            ),
+            array(
+              'name' => 'datum', //optional parameter <code>
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => TRUE,
+              'default value' => 'VL',
+            ),
+          ),
+        ),
+        'update' => array( // PUT
+          'help' => 'Updates dagverslagen records',
+          'callback' => '_ezacvba_degverslagen_update',
+          'access callback' => 'user_access',
+          'access arguments' => array('ezac_vba_input'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'id',
+              'type' => 'string',
+              'description' => 'id',
+              'source' => array('param' => 'id'),
+              'optional' => FALSE,
+            ),
+            array(
+              'name' => 'datum',
+              'type' => 'string',
+              'description' => 'datum',
+              'source' => array('param' => 'datum'),
+              'optional' => FALSE,
+            ),
+            array(
+                'name' => 'instructeur',
+                'type' => 'string',
+                'description' => 'Afkorting instructeur',
+                'source' => array('param' => 'instructeur'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'weer',
+                'type' => 'string',
+                'description' => 'Weer',
+                'source' => array('param' => 'weer'),
+                'optional' => FALSE,
+            ),
+            array(
+                'name' => 'verslag',
+                'type' => 'string',
+                'description' => 'Verslag',
+                'source' => array('param' => 'verslag'),
+                'optional' => FALSE,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return $api;
 }
 
 /**
@@ -94,7 +213,7 @@ function ezacvba_menu() {
     'type' => MENU_LOCAL_TASK,
     'weight' => 2, 
     );
-  $items['vba/persoon'] = array( 
+    $items['vba/persoon'] = array( 
     'title' => 'Invoer persoon',
     'description'=> 'Verslag persoon',
     'page callback' => 'drupal_get_form',
@@ -142,6 +261,16 @@ function ezacvba_menu() {
       'access callback' => 'user_access',
       'access arguments' => array('ezac_vba_input'),
       'type' => MENU_CALLBACK,
+    );
+  $items['vba/mail'] = array(
+    'title' => 'Mailen verslag',
+    'description'=> 'Handmatig verzenden van verslag (bij fouten)',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ezacvba_stuur_verslag_form'),
+    'access callback' => 'user_access',
+    'access arguments' => array('ezac_vba_input'), //$TODO admin recht
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 99, 
     );
 
   return $items;
@@ -213,6 +342,175 @@ function ezacvba_get_bevoegdheden() {
   return $bevoegd;
 }
 
+/**
+* Callback function for dagverslagen create
+* @param string $datum
+* @param string(10) $instructeur
+* @param string(20) $weer
+* @param string(20) $verslag
+* @return int $Id of created record
+*/
+function _ezacvba_dagverslagen_create($datum, $instructeur, $weer, $verslag) {
+
+  // Check input values
+  // datum
+  if (!isset($datum)) {
+      return services_error('Missing field [datum]', 406);
+  }
+  //check datum to be valid
+  $datum_delen = explode('-',$datum);
+  if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) {
+      $errmsg = "Invalid datum value [$datum]";
+      return services_error($errmsg, 406);
+  }
+  // instructeur
+  if (!isset($instructeur)) {
+      return services_error('Missing field [instructeur]', 406);
+  }
+  //instructeur is either id/afkorting or full name (unknown)
+  if (is_numeric($instructeur)) {
+      $id_val = intval($instructeur);
+      // check existance
+      $query = db_select('ezac_Leden', 'l');
+      $query->fields('l', array('Afkorting'));
+      $query->condition('l.Id', $id_val, '=');
+      $afkorting = $query->execute()->fetchCol();
+      if ($afkorting == null) { // not found
+          $errmsg = "Invalid instructeur value [$instructeur]";
+          return services_error($errmsg, 406);
+      }
+      $instructeur = $afkorting; //replace Id with Afkorting
+  }
+  elseif (strlen($instructeur) > 20) {
+      $instructeur = substr(trim($instructeur), 0, 20);
+  }
+  
+  // weer
+  if (!isset($weer)) {
+      return services_error('Missing field [weer]', 406);
+  }
+  
+  // verslag
+  if (!isset($verslag)) {
+      return services_error('Missing field [verslag]', 406);
+  }
+
+  
+  // build dagverslag
+  $entry = array(
+    //'id' => $id, //auto_increment
+    'datum' => $datum,
+    'instructeur' => $instructeur,
+    'weer' => htmlentities($weer),
+    'verslag' => htmlentities($verslag),
+  );
+    
+  //execute the query
+  $id = db_insert('ezac_vba_dagverslagen')
+    ->fields($entry)
+    ->execute();
+  return $id;
+}
+
+/**
+* Callback function for dagverslagen update
+* @param string $id
+* @param string $datum
+* @param string(10) $instructeur
+* @param string(20) $weer
+* @param string(20) $verslag
+* @return int number of records updated
+*/
+function _ezacvba_dagverslagen_update($id, $datum, $instructeur, $weer, $verslag) {
+
+  // Check input values
+  // id
+  if (!isset($datum)) {
+      return services_error('Missing field [id]', 406);
+  }
+  // datum
+  if (!isset($datum)) {
+      return services_error('Missing field [datum]', 406);
+  }
+  //check datum to be valid
+  $datum_delen = explode('-',$datum);
+  if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) {
+      $errmsg = "Invalid datum value [$datum]";
+      return services_error($errmsg, 406);
+  }
+  // instructeur
+  if (!isset($instructeur)) {
+      return services_error('Missing field [instructeur]', 406);
+  }
+  //instructeur is either id/afkorting or full name (unknown)
+  if (is_numeric($instructeur)) {
+      $id_val = intval($instructeur);
+      // check existance
+      $query = db_select('ezac_Leden', 'l');
+      $query->fields('l', array('Afkorting'));
+      $query->condition('l.Id', $id_val, '=');
+      $afkorting = $query->execute()->fetchCol();
+      if ($afkorting == null) { // not found
+          $errmsg = "Invalid instructeur value [$instructeur]";
+          return services_error($errmsg, 406);
+      }
+      $instructeur = $afkorting; //replace Id with Afkorting
+  }
+  elseif (strlen($instructeur) > 20) {
+      $instructeur = substr(trim($instructeur), 0, 20);
+  }
+  
+  // weer
+  if (!isset($weer)) {
+      return services_error('Missing field [weer]', 406);
+  }
+  
+  // verslag
+  if (!isset($verslag)) {
+      return services_error('Missing field [verslag]', 406);
+  }
+  
+  // build dagverslag
+  $entry = array(
+    'id' => $id,
+    'datum' => $datum,
+    'instructeur' => $instructeur,
+    'weer' => htmlentities($weer),
+    'verslag' => htmlentities($verslag),
+  );
+    
+  //execute the query
+  $nr_affected = db_update('ezac_vba_dagverslagen')
+    ->fields($entry)
+    ->condition('id', $id, '='),
+    ->execute();
+  return $nr_affected;
+}
+
+/**
+ * Callback for dagverslagen retrieve
+ * @param string id
+ * $return array record in xml or json
+ */
+function _ezacvba_dagverslagen_retrieve($id) {
+  // check input values
+  if ($id <> '*') { // select specific record
+    if (!is_numeric($id)) {
+      $errmsg = "Id value not allowed [$id]";
+      return services_error($errmsg, 406);
+    }
+    $id = intval($id);
+  }
+
+  // retrieve records
+  $records = db_select('ezac_vba_dagverslagen', 'd')
+  ->fields('d', array('id', 'instructeur', 'weer', 'verslag'))
+  ->condition('d.id', $id, '=')
+  ->execute()->fetchAll();
+  
+  return $records;
+  
+} // retrieve
 
 /**
 * Voortgang en Bevoegdheid Administratie
@@ -855,51 +1153,7 @@ function ezacvba_verslag_form_submit($form, &$form_state) {
     }
 
     //mail verslag naar instructeurs
-    //@TODO haal lijst van e-mail adressen uit ezac_Leden
-    $instructeurs = db_select('ezac_Leden', 'l')
-        ->condition('l.instructie', TRUE)
-        ->condition('l.actief', TRUE)
-        ->fields('l',array('e_mail'))
-        ->execute()->fetchCol();
-    $to = '';
-    foreach ($instructeurs as $email) {
-        $to .= $email .'; ';
-    }
-    $to .= '; webmaster@ezac.nl'; //instructie@ezac.nl
-    $mail_datum = ezac_show_date($form_state['values']['datum_select']['datum']);
-    $mail_instructeur = $namen[$instructeur];
-    $subject = "EZAC verslag $mail_datum van $mail_instructeur";
-    $message = '';
-    $message .= "<p><h1>Omstandigheden</h1></p>$CRLF";
-    $message .= "<p>" .$form_state['values']['weer'] ."</p>$CRLF";
-    $message .= "<p><h1>Verslag</h1></p>";
-    $message .= "<p>" .$form_state['values']['verslag'] ."</p>$CRLF";
-    $message .= "<p><h1>Opmerkingen per leerling</h1></p>$CRLF";
-
-    //haal de opmerkingen uit de database ivm los ingevoerde opmerkingen
-    $verslagen = db_select('ezac_vba_dagverslagen_lid', 'v')
-        ->condition('v.datum', $datum)
-        ->fields('v', array('afkorting', 'instructeur', 'verslag'))
-        ->execute()->fetchAll();
-    if (count($verslagen)) {
-        foreach ($verslagen as $verslag) {
-            $message .= "<p><h2>" .$namen[$verslag->afkorting] ."</h2></p>$CRLF";
-            $message .= "<p>" .$verslag->verslag ."</p>$CRLF";
-        }
-    }
-    
-    $bevoegdheden = db_select('ezac_vba_bevoegdheid_lid', 'bl')
-        ->condition('bl.datum_aan', $datum)
-        ->fields('bl', array('afkorting', 'instructeur', 'bevoegdheid'))
-        ->execute()->fetchAll();
-    if (count($bevoegdheden)) {
-        $message .= "<p><h1>Bevoegdheden toegekend per leerling</h1></p>";
-        foreach($bevoegdheden as $bevoegdheid) {
-            $message .= "<p>" .$namen[$bevoegdheid->afkorting] .": " .$bevoegdheid->bevoegdheid;
-            $message .= " door instructeur " .$namen[$bevoegdheid->instructeur] ."</p>$CRLF";
-        }
-    }
-    ezac_mail($to, $subject, $message); //send e-mail
+    ezacvba_verslagen_mail($datum);
     
     //redirect naar calling url
     if ($current_url != "") {
@@ -909,6 +1163,126 @@ function ezacvba_verslag_form_submit($form, &$form_state) {
 
     // return result
     return;
+}
+
+/**
+* Handmatig mailen van instructieverslag voor een bepaalde dag
+*
+**/
+function ezacvba_stuur_verslag_form($form, &$form_state) {
+    //maak lijst van data in $datum_list
+    //@TODO dit seizoen, deze maand
+    $dagverslagen = db_select('ezac_vba_dagverslagen', 'v')
+        ->fields('v', array('datum', 'instructeur'))
+        ->execute()->fetchAll();
+    krsort($dagverslagen); 
+    foreach ($dagverslagen as $dagverslag) {
+        $datum_list[$dagverslag->datum] = ezac_show_date($dagverslag->datum); //@TODO format correct?
+    }
+    
+    //kies een dag uit de database
+    $form = array();
+    $form['title'] = array(
+        '#type' => 'markup',
+        '#markup' => '<h1>EZAC VBA - Verzend verslag voor bepaalde dag</h1>', 
+        '#weight' => 1,     
+    );
+
+    $form['datum'] = array(
+    '#type' => 'select',
+    '#title' => 'Datum',
+    '#description' => t('Kies een datum voor verzending verslag via mail'),
+    '#options' => $datum_list,
+    '#weight' => 2,
+    );
+    
+    //submit
+    $form['submit'] = array(
+    '#type' => 'submit',
+    '#description' => t('Verslag voor de geselecteerde datum via mail verzenden'),
+    '#value' => t('Verslag mailen'),
+    '#weight' => 99,
+    );
+
+    return $form;
+}
+
+function ezacvba_stuur_verslag_form_validate($form, &$form_state) {
+    if (!isset($form_state['values'])) return;
+    //controleer ingevoerde datum op juistheid
+    $dc = explode('-', $form_state['values']['datum']);
+    if (!checkdate($dc[1], $dc[2], $dc[0])) form_set_error('datum', 'ongeldige datum');
+
+}
+
+function ezacvba_stuur_verslag_form_submit($form, &$form_state) {
+    $datum = $form_state['values']['datum'];
+    ezacvba_verslagen_mail($datum);
+}
+
+/**
+* Mail Verslag (dag en per lid)
+* @param string datum
+**/
+function ezacvba_verslagen_mail($datum) {
+    //mail verslag naar instructeurs
+    $instructeurs = db_select('ezac_Leden', 'l')
+        ->condition('l.instructie', TRUE)
+        ->condition('l.actief', TRUE)
+        ->fields('l',array('e_mail'))
+        ->execute()->fetchCol();
+    $to = '';
+    foreach ($instructeurs as $email) {
+        $to .= $email .'; ';
+    }
+    $to .= 'webmaster@ezac.nl'; //instructie@ezac.nl //TEST DEBUG
+    
+    $subject = "EZAC instructie verslag $datum";
+    
+    //Haal omstandigheden en verslag uit de database
+    $dagverslagen = db_select('ezac_vba_dagverslagen', 'v')
+        ->condition('v.datum', $datum)
+        ->fields('v', array('datum', 'instructeur', 'weer', 'verslag'))
+        ->execute()->fetchAll();
+    $message = '';
+    if (count($dagverslagen)) {
+        foreach ($dagverslagen as $dagverslag) {
+            $mail_instructeur = ezac_get_naam($dagverslag->instructeur);
+            $message .= "<p><h1>Verslag van $mail_instructeur</h1></p>$CRLF";
+            $message .= "<p><h2>Omstandigheden</h2></p>$CRLF";
+            $message .= "<p>" .$dagverslag->weer ."</p>$CRLF";
+            $message .= "<p><h2>Verslag</h2></p>";
+            $message .= "<p>" .$dagverslag->verslag ."</p>$CRLF";
+        }
+    }
+
+    $message .= "<p><h2>Opmerkingen per leerling</h2></p>$CRLF";
+
+    //haal de opmerkingen uit de database ivm los ingevoerde opmerkingen
+    $verslagen = db_select('ezac_vba_dagverslagen_lid', 'l')
+        ->condition('l.datum', $datum)
+        ->fields('l', array('afkorting', 'instructeur', 'verslag'))
+        ->execute()->fetchAll();
+    if (count($verslagen)) {
+        foreach ($verslagen as $verslag) {
+            $message .= "<p><h3>" .ezac_get_naam($verslag->afkorting) ."</h3></p>$CRLF";
+            $message .= "<p>" .$verslag->verslag ."</p>$CRLF";
+        }
+    }
+    
+    $bevoegdheden = db_select('ezac_vba_bevoegdheid_lid', 'bl')
+        ->condition('bl.datum_aan', $datum)
+        ->fields('bl', array('afkorting', 'instructeur', 'bevoegdheid'))
+        ->execute()->fetchAll();
+    if (count($bevoegdheden)) {
+        $message .= "<p><h2>Bevoegdheden toegekend per leerling</h2></p>";
+        foreach($bevoegdheden as $bevoegdheid) {
+            $message .= "<p>" .ezac_get_naam($bevoegdheid->afkorting) .": " .$bevoegdheid->bevoegdheid;
+            $message .= " door instructeur " .ezac_get_naam($bevoegdheid->instructeur) ."</p>$CRLF";
+        }
+    }
+    ezac_mail($to, $subject, $message); //send e-mail
+
 }
 
 /**
