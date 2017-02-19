@@ -54,7 +54,7 @@ function ezacvba_services_resources() {
       'operations' => array(
         'create' => array( // POST
           'help' => 'Creates dagverslagen records',
-          'callback' => '_ezacvba_degverslagen_create',
+          'callback' => '_ezacvba_dagverslagen_create',
           'access callback' => 'user_access',
           'access arguments' => array('ezac_vba_input'),
           'access arguments append' => FALSE,
@@ -90,7 +90,7 @@ function ezacvba_services_resources() {
           ),
         ),
         'retrieve' => array( // GET
-          'help' => 'Inzage dagverslagen',
+          'help' => 'Retrieves dagverslagen',
           'callback' => '_ezacvba_dagverslagen_retrieve',
           'access callback' => 'user_access',
           'access arguments' => array('ezac_vba_view'), 
@@ -100,23 +100,22 @@ function ezacvba_services_resources() {
               'name' => 'resource_id',
               'type' => 'string',
               'description' => 'resource id',
-              'source' => array('path' => '0'), //<id>|<afkorting> of record requested or <*>
+              'source' => array('path' => '0'), //<id>|<*>
               'optional' => FALSE,
               'default value' => '0',
             ),
             array(
-              'name' => 'datum', //optional parameter <code>
+              'name' => 'datum',
               'type' => 'string',
-              'description' => 'datum',
+              'description' => 'Datum value YYYY-MM-DD',
               'source' => array('param' => 'datum'),
               'optional' => TRUE,
-              'default value' => 'VL',
             ),
           ),
         ),
         'update' => array( // PUT
           'help' => 'Updates dagverslagen records',
-          'callback' => '_ezacvba_degverslagen_update',
+          'callback' => '_ezacvba_dagverslagen_update',
           'access callback' => 'user_access',
           'access arguments' => array('ezac_vba_input'),
           'access arguments append' => FALSE,
@@ -125,7 +124,7 @@ function ezacvba_services_resources() {
               'name' => 'id',
               'type' => 'string',
               'description' => 'id',
-              'source' => array('param' => 'id'),
+              'source' => array('path' => '0'),
               'optional' => FALSE,
             ),
             array(
@@ -352,11 +351,8 @@ function ezacvba_get_bevoegdheden() {
 */
 function _ezacvba_dagverslagen_create($datum, $instructeur, $weer, $verslag) {
 
-  // Check input values
-  // datum
-  if (!isset($datum)) {
-      return services_error('Missing field [datum]', 406);
-  }
+  // Check input values  
+  
   //check datum to be valid
   $datum_delen = explode('-',$datum);
   if (!checkdate($datum_delen[1], $datum_delen[2], $datum_delen[0])) {
@@ -425,7 +421,7 @@ function _ezacvba_dagverslagen_update($id, $datum, $instructeur, $weer, $verslag
 
   // Check input values
   // id
-  if (!isset($datum)) {
+  if (!isset($id)) {
       return services_error('Missing field [id]', 406);
   }
   // datum
@@ -482,7 +478,7 @@ function _ezacvba_dagverslagen_update($id, $datum, $instructeur, $weer, $verslag
   //execute the query
   $nr_affected = db_update('ezac_vba_dagverslagen')
     ->fields($entry)
-    ->condition('id', $id, '='),
+    ->condition('id', $id, '=')
     ->execute();
   return $nr_affected;
 }
@@ -492,7 +488,7 @@ function _ezacvba_dagverslagen_update($id, $datum, $instructeur, $weer, $verslag
  * @param string id
  * $return array record in xml or json
  */
-function _ezacvba_dagverslagen_retrieve($id) {
+function _ezacvba_dagverslagen_retrieve($id, $datum = NULL) {
   // check input values
   if ($id <> '*') { // select specific record
     if (!is_numeric($id)) {
@@ -500,13 +496,23 @@ function _ezacvba_dagverslagen_retrieve($id) {
       return services_error($errmsg, 406);
     }
     $id = intval($id);
+    $id_set = TRUE;
+  }
+  else {
+    $id_set = FALSE;
+    if ($datum == NULL || $datum == '') {
+      $datum = date('Y-m-d'); // default today
+    }
   }
 
   // retrieve records
-  $records = db_select('ezac_vba_dagverslagen', 'd')
-  ->fields('d', array('id', 'instructeur', 'weer', 'verslag'))
-  ->condition('d.id', $id, '=')
-  ->execute()->fetchAll();
+  $query = db_select('ezac_vba_dagverslagen', 'd')
+  ->fields('d', array('id', 'datum', 'instructeur', 'weer', 'verslag'));
+  
+  if ($id_set) $query->condition('d.id', $id, '=');
+  else $query->condition('d.datum', $datum, '=');
+
+  $records = $query->execute()->fetchAll();
   
   return $records;
   
